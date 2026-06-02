@@ -5,6 +5,23 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-011 — Power path: TP4056 charging + P-MOSFET load-share
+**2026-06-02.** Chosen over the Hub board's diode-OR (which never charged the cell)
+and over plain TP4056 (load-sharing problem). USB-C charges the LiPo in place via
+**TP4056 @ 1A** (Rprog 1.2k); system rail `VSYS` is fed from **VBUS through a 1N5819
+Schottky (D5)** when plugged, and from the **battery through a P-MOSFET load-share
+(Q1)** when unplugged. Q1 orientation **source=VSYS, drain=VBAT, gate=VBUS w/ 100k
+pulldown** removes the battery-path diode drop (better runtime + LDO headroom) and
+blocks back-feed. Detail in `docs/hardware/POWER-SECTION.md`. Supersedes the
+power-path portion of ADR-008 (keeps 3000mAh + TP4056 + AP2112K). Closes Q-H9.
+
+### ADR-010 — NAND on standard SPI (single-bit), not QSPI quad
+**2026-06-02.** Reuses the proven Hub wiring: W25N01 on plain SPI with **WP#(IO2)
+and HOLD#(IO3) pulled to 3V3 via 10k**, and a 10k pull-up on CS#. On-device Opus
+encoding (ADR-002) makes the data rate tiny, so quad I/O is unnecessary; single SPI
+is simpler to route and **frees GPIO9 and GPIO14**. Supersedes the QSPI routing in
+the original hand-off and PINOUT. Optional future quad upgrade is sacrificed.
+
 ### ADR-009 — Homelab pipeline runs on WSL2 (Ubuntu)
 **2026-06-02.** The i5/4070 server is Windows, but the Python pipeline (faster-
 whisper/CTranslate2, APScheduler, FastAPI) runs far more smoothly on Linux, and
@@ -68,10 +85,9 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
   outline assumed. Affects mic port, button/LED placement, antenna keep-out.
 - **Q-H7: INMP441 mic — NOT on hand (qty 0).** On the LCSC shopping list; confirm
   buy qty (suggest 3). Blocks audio bring-up.
-- **Q-H8: Charger IC form** — TP4056 (SOP-8, recommended) vs MCP73831 (SOT-23-5,
-  smaller). Default TP4056 unless size-critical.
-- **Q-H9: Power-path / load-sharing** — simple 1N5819 Schottky OR-ing vs proper
-  load-share MOSFET vs power-path PMIC. Decide during power-section schematic.
+- *Resolved:* Q-H8 → ADR-011 (TP4056). Q-H9 → ADR-011 (P-MOSFET load-share).
+- **Q-H10: P-MOSFET part** — need a small SOT-23 P-FET (e.g. AO3401A / DMG2305UX,
+  Vgs(th)≈-1V) for the load-share Q1. Not on hand → shopping list. Confirm choice.
 
 ### Homelab (block before Phase 4)
 - *Resolved:* Q-S1 → ADR-009 (WSL2/Ubuntu).

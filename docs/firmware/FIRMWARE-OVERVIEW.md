@@ -3,8 +3,9 @@
 Detailed code lands in Phase 3. This is the plan the code will follow.
 
 ## Framework
-- Leaning **ESP-IDF** (better I2S/DMA, PSRAM, power, and the FSPI NAND driver
+- Leaning **ESP-IDF** (better I2S/DMA, PSRAM, power, and SPI NAND driver
   control we need). Arduino-as-component possible if we want Arduino libs.
+- NAND is **standard SPI single-bit** (ADR-010), not quad — simpler driver.
 - Decision pending: **Q-F1**.
 
 ## Task / data flow

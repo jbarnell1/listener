@@ -14,7 +14,8 @@ after `EXISTING-HARDWARE.md` and the schematic are done.
 | U3 | **TP4056** charge IC (ADR-008) | TBD | SOP-8 (ESON) | LiPo CC/CV charger | ❌ **BUY** |
 | U4 | AP2112K-3.3TRG1 | C23380830 | SOT-23-5 | 3.3V LDO (not a charger!) | ✅ x3 |
 | D1 | USBLC6-2SC6 | C2827654 | SOT-23-6 | USB ESD/TVS | ✅ x3 |
-| D2 | 1N5819WS Schottky | C191023 | SOD-323 | USB↔batt power-path / reverse prot | ✅ |
+| D5 | 1N5819WS Schottky | C191023 | SOD-323 | VBUS→VSYS (USB powers system) | ✅ |
+| Q1 | P-MOSFET (AO3401A/DMG2305UX) | TBD | SOT-23 | battery load-share (ADR-011) | ❌ **BUY** |
 
 ## Power section passives
 | Ref | Value | Footprint | Purpose |
@@ -56,13 +57,17 @@ Paste-ready cart. Quantities assume building 2–3 boards.
 | **JST-PH 2.0 SMD socket** (board side, right-angle) | battery connector | 5 |
 | **0603 LEDs** red + green (+ optional blue) | status/record/charge indicators | 10 ea |
 | **1.2k 0603** resistor | TP4056 Rprog → 1A charge | 10 |
-| (optional) **MCP73831** SOT-23-5 | smaller charger alt to TP4056 (Q-H8) | — |
+| **P-MOSFET** AO3401A / DMG2305UX (SOT-23) | load-share Q1 (ADR-011, Q-H10) | 5 |
 
 ### Already on hand — no need to buy
-- 0603 R: **470** (LED series — perfect), **5.1k** (USB-C CC1/CC2),
-  **10k** (pull-ups), **220k** (battery divider, use 220k/220k → ÷2).
+- 0603 R: **470** (LED series + TP4056 status LEDs), **5.1k** (USB-C CC1/CC2),
+  **10k** (pull-ups: CS#, WP#, HOLD#, EN, BOOT, gate series), **220k** (battery
+  divider 220k/220k → ÷2, and Q1 gate pulldown).
 - 0603 C: **0.1µF, 1µF, 4.7µF, 10µF, 100µF** — covers all decoupling/bulk.
 - Buttons C49234125 (BOOT/RESET/USER/MODE), USB-C, AP2112K, USBLC6, 1N5819, NAND, module.
+
+> NAND in SPI-single mode needs **3× 10k pull-ups** (CS#, WP#, HOLD#) + 100nF — all
+> on hand. Q1 load-share needs a **220k gate pulldown** + **10k gate series** — on hand.
 
 ## Answers to inventory questions
 - **Inductors / ferrite beads:** not required. The AP2112K is a *linear* LDO (no

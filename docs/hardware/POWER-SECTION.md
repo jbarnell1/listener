@@ -59,7 +59,11 @@ USB-C ──VBUS──┬─► TP4056 (charger) ──VBAT──► [Battery JS
 
 ## Block 4 — Load-share (the ADR-011 core)
 - **D5 (1N5819):** anode `VBUS`, cathode `VSYS`.
-- **Q1 (P-MOSFET, AO3401A/DMG2305UX):** **Source = `VSYS`, Drain = `VBAT`.**
+- **Q1 (P-MOSFET, AO3401A, SOT-23):** pins **G=1, S=2, D=3** (go by pin number, not
+  position — symbols can be rotated). Wire **Source(pin2)=`VSYS`, Drain(pin3)=`VBAT`**.
+  In the AO3401's standard orientation that's **Drain at TOP=`VBAT`, Source at
+  BOTTOM=`VSYS`**, Gate on the left. Verify: the **body-diode arrow points toward
+  `VSYS`** (it conducts VBAT→VSYS on battery).
 - **Gate network:** `VBUS — 10k — GATE` and `GATE — 220k — GND`.
   - Plugged: gate ≈ VBUS (> source) → Q1 **OFF**, body diode reverse-biased (VSYS
     4.65V > VBAT ≤4.2V) → **no back-feed into the battery**. ✔

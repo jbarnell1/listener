@@ -39,6 +39,8 @@ USB-C ──VBUS──┬─► TP4056 (charger) ──VBAT──► [Battery JS
 | CC1 | via **R 5.1k → GND** | sink/UFP advertise |
 | CC2 | via **R 5.1k → GND** | (separate resistor each — never share) |
 | D+ / D- | D_P / D_M | go to USBLC6 first (below) |
+- **Bulk cap:** **10µF** `VBUS→GND` near the connector (USB inrush; also serves as
+  the TP4056 input cap).
 
 ## Block 2 — ESD (D_ESD, USBLC6-2SC6)
 - Connector D+/D- → USBLC6 I/O pins → `D_P`/`D_M` to the ESP32 USB (GPIO20/GPIO19).
@@ -55,6 +57,8 @@ USB-C ──VBUS──┬─► TP4056 (charger) ──VBAT──► [Battery JS
 | 1 TEMP | `GND` (thermistor unused) |
 | 7 CHRG | `+3V3 → R 470 → LED(charging) → CHRG` (open-drain sink) |
 | 6 STDBY | `+3V3 → R 470 → LED(full) → STDBY` |
+> **LED color:** use **low-Vf colors (red/green/yellow)** for status LEDs. White/blue
+> (Vf≈3.0–3.2V) barely light on a 3.3V rail. LED anode→3V3, cathode→the TP4056 pin.
 | EP (exposed pad) | `GND` — **required**: it's the GND terminal AND heatsink |
 - Caps: **10µF** `VBUS→GND` and **10µF** `VBAT→GND`, close to the IC.
 - **Thermal (layout):** EP dissipates ~1.3W at 1A charge. Put it on a GND copper
@@ -88,6 +92,8 @@ USB-C ──VBUS──┬─► TP4056 (charger) ──VBAT──► [Battery JS
   - Input: **1µF** from `VSYS` to `GND`, next to pin 1.
   - Output: **10µF** and **100nF** both from `+3V3` to `GND`, next to pin 5
     (100nF closest to the pin = HF bypass; 10µF = bulk for WiFi current bursts).
+  - Recommended: **10µF** bulk on `VSYS→GND` too, so the LDO input doesn't droop
+    during ESP32 WiFi-TX spikes.
 
 ## Block 6 — Battery monitor (sense)
 - Divider **VBAT — 220k — SENSE — 220k — GND**; `SENSE → GPIO7 (ADC1)`; add

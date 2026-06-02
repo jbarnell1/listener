@@ -83,7 +83,11 @@ USB-C ──VBUS──┬─► TP4056 (charger) ──VBAT──► [Battery JS
 | 3 EN | `VSYS` via **10k** (always-on) |
 | 5 VOUT | `+3V3` |
 | 4 NC | leave |
-- Caps: **1µF** `VSYS→GND` (in), **10µF + 100nF** `+3V3→GND` (out).
+- Decoupling caps (each is a 2-pin part: one leg on the rail, one leg on GND;
+  "+" means **in parallel**, place closest pin-side):
+  - Input: **1µF** from `VSYS` to `GND`, next to pin 1.
+  - Output: **10µF** and **100nF** both from `+3V3` to `GND`, next to pin 5
+    (100nF closest to the pin = HF bypass; 10µF = bulk for WiFi current bursts).
 
 ## Block 6 — Battery monitor (sense)
 - Divider **VBAT — 220k — SENSE — 220k — GND**; `SENSE → GPIO7 (ADC1)`; add

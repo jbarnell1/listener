@@ -86,8 +86,7 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
 - **Q-H7: INMP441 mic — NOT on hand (qty 0).** On the LCSC shopping list; confirm
   buy qty (suggest 3). Blocks audio bring-up.
 - *Resolved:* Q-H8 → ADR-011 (TP4056). Q-H9 → ADR-011 (P-MOSFET load-share).
-- **Q-H10: P-MOSFET part** — need a small SOT-23 P-FET (e.g. AO3401A / DMG2305UX,
-  Vgs(th)≈-1V) for the load-share Q1. Not on hand → shopping list. Confirm choice.
+  Q-H10 → **AO3401A** confirmed (G=1, S=2, D=3) for load-share Q1.
 
 ### Homelab (block before Phase 4)
 - *Resolved:* Q-S1 → ADR-009 (WSL2/Ubuntu).

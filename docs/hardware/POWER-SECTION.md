@@ -55,7 +55,11 @@ USB-C ──VBUS──┬─► TP4056 (charger) ──VBAT──► [Battery JS
 | 1 TEMP | `GND` (thermistor unused) |
 | 7 CHRG | `+3V3 → R 470 → LED(charging) → CHRG` (open-drain sink) |
 | 6 STDBY | `+3V3 → R 470 → LED(full) → STDBY` |
+| EP (exposed pad) | `GND` — **required**: it's the GND terminal AND heatsink |
 - Caps: **10µF** `VBUS→GND` and **10µF** `VBAT→GND`, close to the IC.
+- **Thermal (layout):** EP dissipates ~1.3W at 1A charge. Put it on a GND copper
+  pour with **4–9 thermal vias** to the ground plane, or the TP4056 thermally
+  throttles and charges slow/hot. (Set Rprog lower, e.g. 2k≈0.5A, if copper is tight.)
 
 ## Block 4 — Load-share (the ADR-011 core)
 - **D5 (1N5819):** anode `VBUS`, cathode `VSYS`.

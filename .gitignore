@@ -1,0 +1,47 @@
+# Secrets / config
+*.env
+.env*
+secrets.*
+*device-secret*
+*.key
+*.pem
+
+# Audio / data (never commit captured audio or the context DB)
+*.wav
+*.opus
+*.raw
+*.pcm
+*.bin
+listener.db
+*.sqlite
+*.sqlite3
+chunks/
+audio/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# ESP-IDF / Arduino build
+build/
+sdkconfig.old
+.pio/
+*.elf
+*.map
+
+# EDA tool autosaves / exports (keep curated exports under hardware/)
+*~
+*.lck
+*.bak
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/

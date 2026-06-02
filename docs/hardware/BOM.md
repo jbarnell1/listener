@@ -5,15 +5,16 @@ Anything not on hand becomes the LCSC shopping list. Quantities/values firm up
 after `EXISTING-HARDWARE.md` and the schematic are done.
 
 ## Core ICs / modules
-| Ref | Part | Footprint | Notes | On hand? |
-|-----|------|-----------|-------|----------|
-| U1 | ESP32-S3-WROOM-1U (variant TBD, Q-H1) | module | MCU + WiFi/BLE | yes |
-| U2 | Winbond W25N01GVZEIT | WSON-8 6x8 | 128MB NAND, QSPI | yes |
-| MK1 | INMP441 I2S mic | module/SMD | digital mic | yes |
-| J1 | USB-C receptacle | SMD | power + data | yes |
-| U3 | TP4056 (or PMIC) | — | LiPo charger | confirm |
-| U4 | AP2112K-3.3 / MCP1700 | SOT-23-5 / SOT-23 | 3.3V LDO | confirm |
-| D1 | USBLC6-2SC6 | SOT-23-6 | USB ESD/TVS | confirm |
+| Ref | Part | LCSC | Footprint | Notes | On hand? |
+|-----|------|------|-----------|-------|----------|
+| U1 | ESP32-S3-WROOM-1U-N16R8 | C3013946 | module | MCU + WiFi/BLE, octal PSRAM | ✅ x3 |
+| U2 | Winbond W25N01GVZEIT | — | WSON-8 6x8 | 128MB NAND, QSPI | ✅ x3 |
+| MK1 | INMP441 I2S mic | TBD | SMD | digital mic | ❌ **BUY** |
+| J1 | USB-C receptacle | C2765186 | SMD | power + data | ✅ x10+ |
+| U3 | **TP4056** charge IC (ADR-008) | TBD | SOP-8 (ESON) | LiPo CC/CV charger | ❌ **BUY** |
+| U4 | AP2112K-3.3TRG1 | C23380830 | SOT-23-5 | 3.3V LDO (not a charger!) | ✅ x3 |
+| D1 | USBLC6-2SC6 | C2827654 | SOT-23-6 | USB ESD/TVS | ✅ x3 |
+| D2 | 1N5819WS Schottky | C191023 | SOD-323 | USB↔batt power-path / reverse prot | ✅ |
 
 ## Power section passives
 | Ref | Value | Footprint | Purpose |
@@ -44,8 +45,30 @@ after `EXISTING-HARDWARE.md` and the schematic are done.
 | LED3 | (charger CHRG/STBY) | from TP4056 pins directly |
 | Rled* | 330–1k 0603 | LED series resistors |
 
-## To-buy list (LCSC)
-> Populated after inventory: anything marked "confirm"/"no" above plus any
-> passive values you're short on. Keep this list paste-ready for an LCSC cart.
+## To-buy list (LCSC)  — derived from EXISTING-HARDWARE.md
+Paste-ready cart. Quantities assume building 2–3 boards.
 
-- _TBD after `EXISTING-HARDWARE.md` is filled._
+| Item | Why | Suggested qty |
+|------|-----|---------------|
+| **INMP441 I2S mic** | audio input — none on hand (Q-H7) | 3–5 |
+| **TP4056** charge IC (SOP-8) | LiPo charging — LDO can't (ADR-008) | 5 |
+| **3.7V 3000mAh protected LiPo** + **JST-PH 2.0** pigtail | power (ADR-008) | 1–2 |
+| **JST-PH 2.0 SMD socket** (board side, right-angle) | battery connector | 5 |
+| **0603 LEDs** red + green (+ optional blue) | status/record/charge indicators | 10 ea |
+| **1.2k 0603** resistor | TP4056 Rprog → 1A charge | 10 |
+| (optional) **MCP73831** SOT-23-5 | smaller charger alt to TP4056 (Q-H8) | — |
+
+### Already on hand — no need to buy
+- 0603 R: **470** (LED series — perfect), **5.1k** (USB-C CC1/CC2),
+  **10k** (pull-ups), **220k** (battery divider, use 220k/220k → ÷2).
+- 0603 C: **0.1µF, 1µF, 4.7µF, 10µF, 100µF** — covers all decoupling/bulk.
+- Buttons C49234125 (BOOT/RESET/USER/MODE), USB-C, AP2112K, USBLC6, 1N5819, NAND, module.
+
+## Answers to inventory questions
+- **Inductors / ferrite beads:** not required. The AP2112K is a *linear* LDO (no
+  inductor). A ferrite bead on the mic VDD is a nice-to-have for noise but optional.
+- **Crystals:** none — the ESP32-S3 module has its own.
+- **Test points:** optional but recommended — small pads on 3V3, GND, and the
+  UART/JTAG lines make bring-up/debug far easier. Cheap insurance; we'll add a few.
+- **Rprog (charge current):** 1.2k = 1A. You don't have 1.2k yet (have 5.1k=250mA,
+  too slow for 3000mAh). Buy 1.2k, or 2k for a gentler ~0.5A/~6h charge.

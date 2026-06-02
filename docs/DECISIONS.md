@@ -5,6 +5,25 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-009 — Homelab pipeline runs on WSL2 (Ubuntu)
+**2026-06-02.** The i5/4070 server is Windows, but the Python pipeline (faster-
+whisper/CTranslate2, APScheduler, FastAPI) runs far more smoothly on Linux, and
+the user already has WSL2 set up with GitHub auth (BuoyAI workflow). CUDA works in
+WSL2 via the Windows NVIDIA driver. Daemonize via WSL2 systemd units. Closes Q-S1.
+
+### ADR-008 — Battery 3000mAh protected LiPo + dedicated charge IC (TP4056)
+**2026-06-02.** Power budget ≈865 mAh/16h ×1.5 margin → ~1300 mAh/day minimum;
+chose **3.7V 3000mAh protected LiPo, JST-PH 2.0** for ~1.5-day runtime in a
+credit-card footprint. Charging requires a real CC/CV charge IC — **an LDO
+(AP2112K) cannot charge a LiPo**. Use **TP4056 @ 1A** (Rprog 1.2k, ~0.33C, ~4h
+overnight); the AP2112K stays as the 3.3V LDO; the on-hand 1N5819 Schottky does
+USB↔battery power-path. Closes Q-H2.
+
+### ADR-007 — Module confirmed: ESP32-S3-WROOM-1U-N16R8 (octal PSRAM)
+**2026-06-02.** Confirmed N16R8 (16MB flash, 8MB **octal** PSRAM, LCSC C3013946,
+qty 3). Octal PSRAM consumes **GPIO33–37** internally — they are reserved and must
+not be used externally. The preliminary pinout already avoids them. Closes Q-H1.
+
 ### ADR-006 — Timed delivery via APScheduler, not sleeping subprocesses
 **2026-06-02.** Time-sensitive actions ("email at 7 PM") are scheduled jobs, not
 upload-latency problems. Use APScheduler with a SQLite job store so one-off and
@@ -42,23 +61,20 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
 ## Open Questions (close before the dependent phase)
 
 ### Hardware (block before Phase 2)
-- **Q-H1: Exact ESP32-S3 module variant?** e.g. `ESP32-S3-WROOM-1U-N16R8`
-  (16 MB flash / 8 MB **octal** PSRAM) vs `-N8` / quad-PSRAM. Octal PSRAM
-  consumes GPIO33–37, which changes the free-pin budget. **Need the exact part.**
-- **Q-H2: Battery** — capacity (mAh), physical size, connector? Drives charge
-  current (TP4056 Rprog) and board outline.
-- **Q-H3: Charge controller exact part** — genuine TP4056 module vs bare IC vs
-  a PMIC? Confirm against on-hand stock.
-- **Q-H4: LDO choice** — AP2112K-3.3 (600 mA, better for WiFi tx spikes) vs
-  MCP1700 (250 mA, lower Iq). WiFi bursts favor AP2112K. Confirm stock.
-- **Q-H5: Form factor / wearable enclosure** — pendant? clip? Affects outline,
-  mic port, button/LED placement, antenna keep-out.
-- **Q-H6: Reference boards** — export both EasyEDA boards into
-  `hardware/reference/` (schematic PDF + JSON or screenshots).
+- *Resolved:* Q-H1 → ADR-007 (N16R8). Q-H2 → ADR-008 (3000mAh + TP4056).
+  Q-H3 → ADR-008 (TP4056). Q-H4 → AP2112K-3.3 confirmed on hand (3x).
+  Q-H6 → **void**: reference boards are from an unrelated old project, not reused.
+- **Q-H5: Form factor / wearable enclosure** — pendant? clip? Credit-card-ish
+  outline assumed. Affects mic port, button/LED placement, antenna keep-out.
+- **Q-H7: INMP441 mic — NOT on hand (qty 0).** On the LCSC shopping list; confirm
+  buy qty (suggest 3). Blocks audio bring-up.
+- **Q-H8: Charger IC form** — TP4056 (SOP-8, recommended) vs MCP73831 (SOT-23-5,
+  smaller). Default TP4056 unless size-critical.
+- **Q-H9: Power-path / load-sharing** — simple 1N5819 Schottky OR-ing vs proper
+  load-share MOSFET vs power-path PMIC. Decide during power-section schematic.
 
 ### Homelab (block before Phase 4)
-- **Q-S1: Homelab OS** — Windows or Linux? Affects service mgmt, CUDA setup,
-  Tailscale config, and how APScheduler is daemonized. (Dev box here is Win 11.)
+- *Resolved:* Q-S1 → ADR-009 (WSL2/Ubuntu).
 - **Q-S2: Email transport** — Gmail API vs SMTP app-password? "Day Ahead" + timed
   emails. Confirm the Google Workspace account + intended tagging scheme.
 - **Q-S3: LLM for intent split** — local model vs Gemini API? Privacy vs quality.

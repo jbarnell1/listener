@@ -46,30 +46,35 @@ after `EXISTING-HARDWARE.md` and the schematic are done.
 | LED3 | (charger CHRG/STBY) | from TP4056 pins directly |
 | Rled* | 330–1k 0603 | LED series resistors |
 
-## To-buy list (LCSC)  — derived from EXISTING-HARDWARE.md
-Paste-ready cart. Quantities assume building 2–3 boards.
+## To-buy list (LCSC) — reconciled against exported board BOM + on-hand stock (2026-06-03)
+Paste-ready cart. Buy ~3–5× each (building up to 3 boards; LCSC has order minimums).
 
-| Item | Why | Suggested qty |
-|------|-----|---------------|
-| **INMP441 breakout module** (Amazon 5-pack ~$12) | audio input (ADR-012) — mounts on 2×(1×3) header | have |
-| **2×(1×3) header / female socket** for the mic module | on-board mount (ADR-012) | 2 rows |
-| **TP4056** charge IC (SOP-8) | LiPo charging — LDO can't (ADR-008) | 5 |
-| **407090 3.7V 3000mAh LiPo** (92×70×4mm, JST-PH2.0 pigtail) | power (ADR-008); Amazon | 1 |
-| **JST-PH 2.0 SMD socket** (board side, right-angle) | battery connector | 5 |
-| **0603 LEDs** red + green (+ optional blue) | status/record/charge indicators | 10 ea |
-| **1.2k 0603** resistor | TP4056 Rprog → 1A charge | 10 |
-| **P-MOSFET** AO3401A / DMG2305UX (SOT-23) | load-share Q1 (ADR-011, Q-H10) | 5 |
-| **2.4GHz U.FL/IPEX antenna** | WROOM-**1U** has no PCB antenna — needs external | 2–3 |
+| Item | LCSC | Qty/board | For |
+|------|------|-----------|-----|
+| **TP4056** charger | C5311018 | 1 | U1 |
+| **AO3401A** P-MOSFET | C15127 | 1 | Q1 |
+| **1.2kΩ** 0603 | C22765 | 1 | R1 (PROG) |
+| **Red LED** KT-0603R | C2286 | 2 | REC, STDBY |
+| **Green LED** KT-0603G | C12624 | 2 | CHRG, STATUS |
+| **1×3 header** 2.54 | C52016391 | 2 | H1, H2 (or reuse mic-module pins) |
+| **INMP441 breakout module** | Amazon | have | mic (ADR-012) |
+| **407090 3000mAh LiPo** | Amazon | ordered | power |
+| **2.4GHz U.FL antenna** | LCSC/Amazon | 1 | U5 (NOT in board BOM — external) |
 
-### Already on hand — no need to buy
-- 0603 R: **470** (LED series + TP4056 status LEDs), **5.1k** (USB-C CC1/CC2),
-  **10k** (pull-ups: CS#, WP#, HOLD#, EN, BOOT, gate series), **220k** (battery
-  divider 220k/220k → ÷2, and Q1 gate pulldown).
-- 0603 C: **0.1µF, 1µF, 4.7µF, 10µF, 100µF** — covers all decoupling/bulk.
-- Buttons C49234125 (BOOT/RESET/USER/MODE), USB-C, AP2112K, USBLC6, 1N5819, NAND, module.
+### Already on hand — exact LCSC match
+100nF (C14663), 1µF (C15849), 10µF (C19702), 470Ω (C23179), JST S2B-PH (C173752),
+1N5819 (C191023), USB-C (C2765186), USBLC6 (C2827654), ESP32 (C3013946),
+NAND (C17656808), AP2112K (C23380830), tact switch (C49234125).
 
-> NAND in SPI-single mode needs **3× 10k pull-ups** (CS#, WP#, HOLD#) + 100nF — all
-> on hand. Q1 load-share needs a **220k gate pulldown** + **10k gate series** — on hand.
+### On hand — substitute (same value, different code)
+- **5.1kΩ**: have C2907044 (BOM auto-picked C23186) → use yours (R2, R4).
+- **10kΩ**: have C98220 (BOM auto-picked C25804) → use yours (R6, R9, R11–R18).
+
+### ⚠️ Verify before ordering
+- **220kΩ (R7/R8/R10):** confirm on-hand `C22962` is **kΩ not Ω**. Any matched
+  high value (220k–240k) is fine (divider stays ÷2, low drain). 220 **Ω** would
+  drain the battery ~1000× faster → then buy 220kΩ (C22961).
+- Have but **unused** by this design: 100µF (C15008), 4.7µF (C19666).
 
 ## Answers to inventory questions
 - **Inductors / ferrite beads:** not required. The AP2112K is a *linear* LDO (no

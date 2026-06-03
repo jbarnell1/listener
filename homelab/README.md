@@ -54,6 +54,14 @@ Prints `SPEAKER_00 / SPEAKER_01 / ...` turns with timestamps. JFK (1 speaker) �
 one speaker; use a 2-person clip to see it split. Uses `community-1` (open, but
 gated — accept its HF terms once).
 
+**Speaker-attributed transcript** (merge of transcription + diarization):
+```bash
+~/listener-venv/bin/python attribute.py samples/two.wav small.en
+```
+`attribute.py` runs both engines as subprocesses (separate venvs) and merges by
+timestamp overlap → "SPEAKER_00: …". *TODO (production):* word-level attribution
+(`word_timestamps=True`) so boundary-straddling segments split correctly.
+
 ## Milestone status (PIPELINE.md H1–H6)
 - [x] **H1** — WSL2 + CUDA + faster-whisper transcribes a WAV
 - [ ] H2 — FastAPI `/ingest` (verify HMAC, store, ACK)

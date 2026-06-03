@@ -9,6 +9,7 @@ Proves the WSL2 + CUDA + faster-whisper path works end-to-end.
 """
 import ctypes
 import glob
+import json
 import os
 import sys
 import time
@@ -37,25 +38,34 @@ from faster_whisper import WhisperModel  # noqa: E402  (must follow preload)
 
 
 def main() -> None:
-    audio = sys.argv[1] if len(sys.argv) > 1 else "samples/jfk.wav"
-    model_size = sys.argv[2] if len(sys.argv) > 2 else "small.en"
+    as_json = "--json" in sys.argv  # machine-readable mode (only JSON on stdout)
+    args = [a for a in sys.argv[1:] if a != "--json"]
+    audio = args[0] if len(args) > 0 else "samples/jfk.wav"
+    model_size = args[1] if len(args) > 1 else "small.en"
 
-    # device="cuda" + float16 → run on the 4070S at ~half the VRAM of float32,
-    # with no speech-accuracy loss that matters.
-    print(f"Loading '{model_size}' on CUDA (float16)...", flush=True)
+    def log(msg):  # human prints go to stderr in json mode so stdout stays clean
+        print(msg, file=sys.stderr if as_json else sys.stdout, flush=True)
+
+    # device="cuda" + float16 → run on the 4070S at ~half the VRAM of float32.
+    log(f"Loading '{model_size}' on CUDA (float16)...")
     t0 = time.time()
     model = WhisperModel(model_size, device="cuda", compute_type="float16")
-    print(f"  loaded in {time.time() - t0:.1f}s")
+    log(f"  loaded in {time.time() - t0:.1f}s")
 
-    print(f"Transcribing: {audio}", flush=True)
+    log(f"Transcribing: {audio}")
     t1 = time.time()
-    # transcribe() returns a lazy generator of segments + an info object;
-    # consuming the generator is what actually does the work.
     segments, info = model.transcribe(audio, beam_size=5)
-    for seg in segments:
-        print(f"  [{seg.start:6.2f} -> {seg.end:6.2f}]  {seg.text.strip()}")
+    rows = []
+    for seg in segments:  # consuming the generator does the work
+        rows.append({"start": round(seg.start, 2), "end": round(seg.end, 2),
+                     "text": seg.text.strip()})
+        if not as_json:
+            print(f"  [{seg.start:6.2f} -> {seg.end:6.2f}]  {seg.text.strip()}")
     elapsed = time.time() - t1
 
+    if as_json:
+        print(json.dumps(rows))
+        return
     rtf = elapsed / info.duration if info.duration else float("nan")
     print()
     print(f"language  : {info.language} (p={info.language_probability:.2f})")

@@ -90,6 +90,11 @@ A resistor's function doesn't depend on trace length. **Keep local anyway:**
   2oz just costs more. 0.5mm on 1oz carries ~1.5A.
 - **Ground:** copper **pour GND on both layers**, stitch with vias; solid ground
   under the MCU and SPI/I2S signals (short return paths).
+- **Order of ops:** place → route → add vias (thermal under EP pads + stitching) →
+  **pour both layers LAST** → rebuild/refill pours → DRC. Pour is "fill what's left,"
+  so it flows around finished traces — never pour before routing.
+- **Closing ritual before export:** rebuild/refill pours → DRC → then Gerbers.
+  (A via added after pouring isn't truly connected until you refill.)
 - Keep SPI (SCK/MOSI/MISO/CS) and I2S short and roughly equal; keep them away from
   the charge/switch nodes.
 - USB D+/D−: route as a rough pair, short, through D1.

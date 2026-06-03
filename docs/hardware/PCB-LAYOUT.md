@@ -36,6 +36,26 @@ right at the cap's ground pad.** Place each IC, then immediately cluster its pas
 - **LEDs:** placed for visibility through the enclosure; 470Ω next to each.
 - **Mic headers:** near the enclosure mic opening, away from power/antenna.
 
+## 1b. Board outline + floorplan (decided)
+- **Outline: 85 × 54 mm**, 2-layer, ~3mm rounded corners, **M2 holes in 4 corners**.
+- **Battery stacked behind** (3000mAh) in a 3D-printed case → **all components on
+  the TOP layer**, bottom kept flat for the pack (foam tape) + ground pour. Single-
+  sided assembly = cheaper.
+```
+ ┌──────────────────────────────────────────────────────────┐
+ │ [MIC hdrs]                          U.FL→  [LED1][LED2]    │
+ │                  ┌────────────┐   ┌──────┐  [REC][STAT]   │
+ │ [BTN_USER]       │ U5 ESP32-S3│   │ U4   │                │
+ │ [BTN_MODE]       │ +decoupling│   │ NAND │                │
+ │ [BOOT][RESET]    └────────────┘   └──────┘                │
+ │ [USB-C] D1  U1 TP4056   Q1/D5   U2 LDO        [JST batt]  │
+ └──────────────────────────────────────────────────────────┘
+```
+- Bottom edge = full power chain L→R: USB-C → D1 → TP4056 → load-share → LDO → JST.
+- Center: U5 + decoupling; U4 NAND right beside it (short SPI).
+- Top edge: mic at the case opening, module U.FL end facing this edge, LEDs visible.
+- Left edge: the four buttons.
+
 ## 2. Placement strategy (clusters)
 - **Power cluster** (one corner near the USB-C edge): USB-C → D1 → U1 → load-share
   → U2. Keeps high-current loops tight.

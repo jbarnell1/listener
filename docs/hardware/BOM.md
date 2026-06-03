@@ -54,7 +54,7 @@ Paste-ready cart. Quantities assume building 2–3 boards.
 | **INMP441 breakout module** (Amazon 5-pack ~$12) | audio input (ADR-012) — mounts on 2×(1×3) header | have |
 | **2×(1×3) header / female socket** for the mic module | on-board mount (ADR-012) | 2 rows |
 | **TP4056** charge IC (SOP-8) | LiPo charging — LDO can't (ADR-008) | 5 |
-| **3.7V 3000mAh protected LiPo** + **JST-PH 2.0** pigtail | power (ADR-008) | 1–2 |
+| **407090 3.7V 3000mAh LiPo** (92×70×4mm, JST-PH2.0 pigtail) | power (ADR-008); Amazon | 1 |
 | **JST-PH 2.0 SMD socket** (board side, right-angle) | battery connector | 5 |
 | **0603 LEDs** red + green (+ optional blue) | status/record/charge indicators | 10 ea |
 | **1.2k 0603** resistor | TP4056 Rprog → 1A charge | 10 |

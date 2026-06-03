@@ -53,14 +53,17 @@ Paste-ready cart. Buy ~3–5× each (building up to 3 boards; LCSC has order min
 |------|------|-----------|-----|
 | **TP4056** charger | C5311018 | 1 | U1 |
 | **AO3401A** P-MOSFET | C15127 | 1 | Q1 |
-| **1.2kΩ** 0603 | C22765 | 1 | R1 (PROG) |
+| **1.2kΩ** 0603 (YAGEO RC0603FR-071K2L) | C114605 | 1 | R1 (PROG) — sub, C22765 OOS |
 | **220kΩ** 0603 | C22961 | 3 | R7, R8, R10 (divider + Q1 gate pulldown) |
-| **Red LED** KT-0603R | C2286 | 2 | REC, STDBY |
-| **Green LED** KT-0603G | C12624 | 2 | CHRG, STATUS |
-| **1×3 header** 2.54 | C52016391 | 2 | H1, H2 (or reuse mic-module pins) |
+| **Red LED** KT-0603R (2.4V) | C2286 | 2 | REC, STDBY |
+| **Green LED** SML-E12P8WT86 (2.2V) | C126319 | 2 | CHRG, STATUS — low-Vf (emerald 3.1V was too dim) |
+| 1×3 headers (H1, H2) | — | reuse | mic module's included pins |
 | **INMP441 breakout module** | Amazon | have | mic (ADR-012) |
 | **407090 3000mAh LiPo** | Amazon | ordered | power |
 | **2.4GHz U.FL antenna** | — | have | on hand from prior project |
+
+> ⚠️ Hand-assembly: the green LED (ROHM) is a different brand than the footprint's
+> original part — verify its cathode mark against the footprint when placing.
 
 ### Already on hand — exact LCSC match
 100nF (C14663), 1µF (C15849), 10µF (C19702), 470Ω (C23179), JST S2B-PH (C173752),

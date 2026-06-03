@@ -14,8 +14,7 @@ right at the cap's ground pad.** Place each IC, then immediately cluster its pas
 ### Decoupling placement (by designator)
 | IC | At the pin | Pin |
 |----|-----------|-----|
-| U5 ESP32-S3 | C9 (100nF) closest + C11 (10µF) | 3V3 (2) |
-| U5 | C12 (100nF) | other 3V3 pin |
+| U5 ESP32-S3 | C9 (100nF) closest + C11 (10µF) + C12 (100nF) | 3V3 (pin 2 — the *only* 3V3 pin; cluster all 3, GND return at adjacent pin 1) |
 | U5 | C8 (1µF) + R13 (10k) | EN (3) |
 | U5 | R15 (10k) | IO0 (27) |
 | U4 NAND | C10 (100nF) | VCC (8) |

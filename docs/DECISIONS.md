@@ -5,6 +5,44 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-018 — Upload cadence: batched bursts, radio off between
+**2026-06-03.** Device records continuously (VAD) to NAND; the WiFi radio stays
+**off** between uploads. Uploads in batched bursts: **default every ~15–30 min on
+home WiFi, immediately on home-WiFi (re)connect, and early if the buffer exceeds
+~8 MB.** Away (hotspot/Funnel) less often / opt-in; offline → keep buffering.
+Uploads cost ~40 mAh/day (negligible — *listening* dominates battery). Ample lead
+for SOON items (≤30 min + processing ≪ the typical 3–4 hr horizon). Config knob.
+
+### ADR-017 — Time handling: LLM emits local, code resolves UTC via IANA zone
+**2026-06-03.** The prompt gives the model the current local time + IANA tz
+`America/Chicago`. The model returns a **local** time/phrase (`due_local`/`due_text`)
+— never raw UTC arithmetic (LLMs are unreliable at offset/DST math). **Code** converts
+to UTC via `zoneinfo`/`dateparser` (RELATIVE_BASE=now, PREFER_DATES_FROM=future); the
+IANA zone resolves CST/CDT automatically so DST is never tracked by hand. **Store UTC**,
+render Central. The model's `due_local` is kept as a cross-check.
+
+### ADR-016 — Fully-local pipeline via Ollama; LLM model TBD from 12GB shortlist
+**2026-06-03.** ALL processing stays on the homelab GPU — faster-whisper, pyannote,
+ECAPA, and the LLM — for privacy: raw audio / transcripts / voice profiles never leave
+the box (Gemini only ever sees the curated *outgoing email*). LLM served via **Ollama**
+with grammar/JSON-constrained output. **Model not hard-committed** — benchmark a
+12GB-class shortlist on real transcripts, pick by JSON validity + SOON/LATER accuracy:
+**Phi-4 Reasoning 14B, Qwen3 14B, Mistral Small 3 7B, Gemma 3 12B**. (Kimi/MiniMax are
+1T / hundreds-of-B MoE → off-hardware + API-only → excluded.) VRAM: run the audio stage
+then the LLM stage (load/unload) to stay under 12 GB. Resolves Q-S3 → local; strengthens
+Q-S5.
+
+### ADR-015 — GPU-aware processing gate (auto-detect gaming), defer heavy work
+**2026-06-03.** The homelab GPU is shared with gaming. The heavy lane checks a gate
+**on-demand before each job** (not continuous polling): reads the **Windows
+`nvidia-smi.exe`** via WSL interop (the Linux WSL `nvidia-smi` can't reliably see host
+graphics apps). **Defer if free VRAM < ~6 GB OR avg GPU-util > ~40%**; when deferred,
+sleep ~10–30 min and re-check (60 s averaged sample to confirm clear; hysteresis).
+Gate is checked only when the worker is **idle**, so the pipeline never gates itself.
+Backlog self-heals at the 3 AM idle window before the 6 AM summary. CPU work (ingest,
+scheduler, email) never pauses → **timely emails always fire, even mid-game.** No fixed
+quiet-hours cron needed.
+
 ### ADR-014 — Speaker diarization, identification & relational profiling
 **2026-06-03.** Resolves issue #1. Every transcript is **speaker-attributed** and
 the pipeline builds **per-person relational profiles**. Stack (homelab GPU):
@@ -118,7 +156,7 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
 - *Resolved:* Q-S1 → ADR-009 (WSL2/Ubuntu).
 - **Q-S2: Email transport** — Gmail API vs SMTP app-password? "Day Ahead" + timed
   emails. Confirm the Google Workspace account + intended tagging scheme.
-- **Q-S3: LLM for intent split** — local model vs Gemini API? Privacy vs quality.
+- *Resolved:* Q-S3 → ADR-016 (fully local via Ollama; model TBD from 12GB shortlist).
 - **Q-S4: Audio retention policy** — keep raw audio how long after transcription?
 - **Q-S5: Voice-profile consent & retention** (ADR-014) — third parties haven't
   opted in. Retention of embeddings, `do_not_profile` list, delete-a-person,
@@ -132,3 +170,5 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
 - *Resolved:* Q-F1 → ADR-013 (Arduino / arduino-esp32 v3.x).
 - **Q-F2: Opus vs ADPCM** for v1 — start ADPCM/raw to get the pipeline working,
   add Opus later for compression. Depends on CPU/power headroom + PSRAM.
+- *Resolved:* Q-F3 (upload cadence) → ADR-018 (batched bursts; ~15–30 min on home
+  WiFi + on-reconnect + size cap; radio off between).

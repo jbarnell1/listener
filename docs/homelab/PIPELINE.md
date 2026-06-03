@@ -18,9 +18,11 @@ Runs on the i5 + RTX 4070 Super. Detailed code lands in Phase 4.
      online-cluster into an `Unknown #N`.
    - Update each speaker's **relational profile** (topics, emotion trend, recurring
      asks, last-seen/frequency). Named via the dashboard (auto-cluster → label).
-4. **Intent splitter** (LLM) — now **speaker-aware**
+4. **Intent splitter** (LLM) — speaker-aware, **fully local** (ADR-016)
    - Per speaker-attributed segment, produce structured intents (schema below) +
-     profile/context updates, attributing to the speaker. Local model or Gemini — Q-S3.
+     profile updates, attributing to the speaker. **Ollama** with JSON/grammar-
+     constrained output. Model TBD from a 12GB shortlist (Phi-4 Reasoning 14B /
+     Qwen3 14B / Mistral Small 3 7B / Gemma 3 12B) — benchmark + pick.
 5. **Scheduler / dispatcher** — see `SCHEDULING.md` (APScheduler).
 6. **Dashboard (PWA)** — label unknown speaker clusters, review/edit profiles +
    context, conversational edit agent.
@@ -66,6 +68,13 @@ schedule_jobs(...)   -- APScheduler's own job store table
 - SOON = needs action today / time-sensitive → goes to the scheduler.
 - LATER = tomorrow+ or informational → folded into the daily summary.
 
+### Time handling (ADR-017)
+- Prompt gives the model `current_local` + IANA tz `America/Chicago`.
+- Model emits a **local** `due_local` / `due_text` — **no UTC/offset math** (LLMs are
+  weak at it). **Code** resolves to UTC via `dateparser`/`zoneinfo` (RELATIVE_BASE=now,
+  PREFER_DATES_FROM=future); the IANA zone handles CST/CDT automatically (no manual DST).
+- **Store UTC** in the DB; render Central in emails. `due_local` kept as a cross-check.
+
 ## Email formatting (Gemini-friendly)
 - Immediate emails: terse subject with a stable tag (e.g. `[ACTION] trash 7PM`),
   body with the single action + source quote + time, to maximize Workspace/Gemini
@@ -89,6 +98,23 @@ schedule_jobs(...)   -- APScheduler's own job store table
 - **Setup note (Q-S7):** pyannote models are gated — need a HuggingFace account +
   accept the model terms to download.
 
+## GPU-aware processing gate (ADR-015) — shares the card with gaming
+The **heavy lane** (whisper, pyannote, ECAPA, LLM) is GPU-bound; the homelab also
+games. Gate it so games win:
+- **On-demand check, not continuous polling.** Before grabbing a job (worker idle),
+  read GPU state once. If busy → sleep ~10–30 min, re-check.
+- **Source the host truth:** call the **Windows `nvidia-smi.exe`** via WSL interop
+  (the Linux WSL `nvidia-smi` may not see host graphics apps).
+- **Defer if** `free_VRAM < ~6 GB` **OR** `avg_util > ~40%` (VRAM is the more reliable
+  "game resident" signal — catches frame-capped games util misses).
+- **Resume** only after the clear condition holds ~60 s (hysteresis; sampled @2 s).
+- Check **only when idle** so the pipeline never gates itself (jobs are <1 min → yields
+  within a minute of a game launching).
+- Backlog self-heals at the **3 AM** idle window, before the 6 AM summary.
+- **CPU work never pauses** (ingest, APScheduler, email) → **timely emails fire even
+  mid-game.** No fixed quiet-hours cron needed.
+
 ## Security
 - HMAC verify on ingest; reject stale timestamps (replay).
-- Audio retention policy: **Q-S4**.
+- Audio retention policy: **Q-S4**. Voice profiles/embeddings are **local-only**
+  (ADR-016) — never leave the homelab.

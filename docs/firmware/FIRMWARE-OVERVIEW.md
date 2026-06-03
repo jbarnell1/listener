@@ -76,6 +76,15 @@ Detailed code lands in Phase 3. This is the plan the code will follow.
 - Each POST: TLS, `Authorization: Bearer <token>`, `X-Sig: HMAC(secret, body+ts)`.
 - Delete local segment only on `200 {acked: seq}`.
 
+## Upload cadence (ADR-018)
+- Recording is continuous (VAD); the **WiFi radio stays OFF between uploads** (the
+  real battery saver). Uploads are **batched bursts**, triggered by:
+  - **timer** — default every **~15–30 min** on home WiFi (configurable),
+  - **(re)connect** to home WiFi — dump the buffer immediately, and
+  - **size cap** — upload early if buffered audio > ~8 MB.
+- Away (hotspot/Funnel): less often / opt-in. Offline: keep buffering to NAND.
+- ~40 mAh/day for uploads (negligible); listening dominates battery.
+
 ## Provisioning
 - First boot / hold MODE at boot → ESP32 starts SoftAP + captive portal to set:
   home SSID/pass, hotspot SSID/pass, ingest URLs, device token/secret.

@@ -8,6 +8,8 @@ problem, not a connectivity problem (see ADR-006).
   `SQLAlchemyJobStore(url="sqlite:///listener.db")`.
 - Jobs **persist across restarts** — a reboot at 5 PM still fires the 7 PM email.
 - Supports both **one-off** (`date` trigger) and **recurring** (`cron` trigger).
+- Run the scheduler in **UTC**; `due_at` is stored UTC (ADR-017). Render Central
+  (`America/Chicago`) only at display/email time.
 
 ## Two tiers
 ### Tier SOON — timed one-off jobs

@@ -62,12 +62,27 @@ gated — accept its HF terms once).
 timestamp overlap → "SPEAKER_00: …". *TODO (production):* word-level attribution
 (`word_timestamps=True`) so boundary-straddling segments split correctly.
 
+## H3.6 — speaker identity (ECAPA) ✅
+ECAPA 192-d voiceprints + a tiny JSON library name → centroid (`speakers.json`,
+gitignored — it's biometric). All in the **diarization venv**.
+```bash
+# enroll a known voice once:
+~/listener-diar/bin/python enroll.py Jon samples/jon.wav
+# diarize + identify (names, not SPEAKER_xx):
+~/listener-diar/bin/python identify.py samples/two.wav
+# full named transcript (attribute.py now calls identify.py):
+~/listener-venv/bin/python attribute.py samples/two.wav small.en
+```
+`embed.py fileA fileB` prints cosine similarity (same speaker ~0.5+, different
+~<0.3). Match threshold = 0.40 (Q-S6, in `speakerid.py`). Unknown speakers get
+`Unknown_xx` → label later in the dashboard → auto-recognized after.
+
 ## Milestone status (PIPELINE.md H1–H6)
 - [x] **H1** — WSL2 + CUDA + faster-whisper transcribes a WAV
 - [ ] H2 — FastAPI `/ingest` (verify HMAC, store, ACK)
 - [ ] H3 — transcriber worker → SQLite
 - [x] **H3.5** — pyannote diarization (community-1, GPU)
-- [ ] H3.6 — ECAPA embeddings + speaker ID/cluster
+- [x] **H3.6** — ECAPA embeddings + speaker ID (enroll/identify, named transcript)
 - [ ] H4 — speaker-aware LLM intent split (Ollama; model from 12GB shortlist)
 - [ ] H5 — APScheduler timed email + daily 6 AM summary
 - [ ] H6 — PWA dashboard (label speakers, review profiles)

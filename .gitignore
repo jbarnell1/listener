@@ -18,6 +18,10 @@ listener.db
 chunks/
 audio/
 
+# Speaker voiceprints (biometric) + downloaded model caches — never commit
+speakers.json
+models/
+
 # Python
 __pycache__/
 *.pyc

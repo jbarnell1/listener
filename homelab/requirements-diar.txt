@@ -16,3 +16,4 @@
 # (torchcodec needs system ffmpeg: `sudo apt install ffmpeg`.)
 
 pyannote.audio==4.0.4
+speechbrain==1.1.0      # ECAPA-TDNN speaker embeddings (H3.6)

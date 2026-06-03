@@ -33,12 +33,12 @@ def run_json(python: str, script: str, *args: str):
 
 
 def speaker_for(seg, turns):
-    """The speaker whose diarization turns overlap this segment the most."""
+    """The speaker (name if identified) whose turns overlap this segment most."""
     best, best_overlap = "?", 0.0
     for t in turns:
         overlap = max(0.0, min(seg["end"], t["end"]) - max(seg["start"], t["start"]))
         if overlap > best_overlap:
-            best_overlap, best = overlap, t["speaker"]
+            best_overlap, best = overlap, t.get("name", t["speaker"])
     return best
 
 
@@ -46,10 +46,10 @@ def main() -> None:
     audio = sys.argv[1] if len(sys.argv) > 1 else "samples/two.wav"
     model = sys.argv[2] if len(sys.argv) > 2 else "small.en"
 
-    print(f"[1/2] transcribing (CUDA-12 venv) ...", file=sys.stderr, flush=True)
+    print(f"[1/2] transcribing      (CUDA-12 venv) ...", file=sys.stderr, flush=True)
     segments = run_json(WHISPER_PY, "transcribe.py", audio, model)
-    print(f"[2/2] diarizing   (CUDA-13 venv) ...", file=sys.stderr, flush=True)
-    turns = run_json(DIAR_PY, "diarize.py", audio)
+    print(f"[2/2] diarize+identify  (CUDA-13 venv) ...", file=sys.stderr, flush=True)
+    turns = run_json(DIAR_PY, "identify.py", audio)
 
     print(f"\n=== Speaker-attributed transcript: {audio} ===")
     last_speaker = None

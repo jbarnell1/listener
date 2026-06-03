@@ -5,8 +5,14 @@ All nets arrive from the MCU sheet by name: `I2S_BCLK, I2S_WS, I2S_SD, BTN_USER,
 BTN_MODE, LED_REC, LED_STAT`, plus `3V3`/`GND`.
 
 ## Block C — INMP441 module on a 2×(1×3) header (MK1, ADR-012)
-Pre-made breakout mounts on the main board. Two 1×3 through-hole headers (2.54mm
-pitch each); **row-to-row spacing = measure the actual module with calipers**.
+Pre-made breakout (Teyleten, board ≈ 0.55 × 0.47 in). Two 1×3 through-hole headers
+(2.54mm / 0.1" within each row).
+- **Row-to-row spacing: best estimate 0.3" (7.62mm)** — the DIP/breadboard standard,
+  fits the 0.47" board, breadboard-compatible. **Measure the real module to confirm
+  before fab**; use generous ~1.0mm holes to forgive small error.
+- **Alt mount (good for acoustics): wire-out.** Mount the mic at the enclosure's
+  sound opening, run 6 thin wires to a simple **1×6 landing strip** on the board.
+  Removes the spacing problem and puts the port right at the case hole.
 | Module pad | Net |
 |-----------|-----|
 | VDD | `3V3` |

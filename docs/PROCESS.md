@@ -30,10 +30,13 @@ ordered at JLCPCB**; LCSC + Amazon parts ordered. ~2 week lead time. See
 ## Phase 4 — Homelab Pipeline (Python)
 - Ingest endpoint (verifies HMAC) → object store of chunks
 - faster-whisper transcription (CUDA / RTX 4070 Super)
-- LLM intent split: SOON vs LATER → structured rows in SQLite
+- **Speaker diarization + ID + relational profiling** (pyannote + ECAPA) — core,
+  ADR-014: every transcript speaker-attributed; auto-cluster + dashboard labeling
+- Speaker-aware LLM intent split: SOON vs LATER → structured rows in SQLite
 - APScheduler dispatch (timed emails) + daily "Day Ahead" summary
-- Context store + conversational edit agent + PWA review dashboard
-- **Done when:** an utterance produces a correctly-timed email end-to-end.
+- Speaker/profile store + conversational edit agent + PWA review dashboard
+- Milestones H1–H6 in `homelab/PIPELINE.md` (all testable with a recorded WAV)
+- **Done when:** a speaker-attributed utterance produces a correctly-timed email.
 
 ## Phase 5 — Phone/Provisioning polish
 - Captive-portal flow refined; Tasker recipes for immediate actions

@@ -24,13 +24,18 @@ phase docs implement it.
    (Python)      │   /ingest (verify HMAC) ─▶ chunk store    │
                  │     │                                     │
                  │     ▼                                     │
-                 │   faster-whisper (CUDA) ─▶ transcript     │
+                 │   pyannote diarize + faster-whisper ─▶     │
+                 │     speaker-attributed transcript         │
                  │     │                                     │
                  │     ▼                                     │
-                 │   LLM intent split ──┬─ SOON  (today)     │
+                 │   ECAPA embeddings ─▶ ID vs voice library │
+                 │     ─▶ relational profiles (people)       │
+                 │     │                                     │
+                 │     ▼                                     │
+                 │   LLM intent split (speaker-aware) ──┬─SOON│
                  │     │                └─ LATER (tomorrow+)  │
                  │     ▼                                     │
-                 │   SQLite context + intents                │
+                 │   SQLite intents + speakers + profiles    │
                  │     │                                     │
                  │     ▼                                     │
                  │   APScheduler ─▶ timed email/webhook      │
@@ -50,6 +55,17 @@ phase docs implement it.
   never lost.
 - Buttons: **Force-Continuous** ("don't miss anything") and **Privacy-Mute**.
 - Skips idle/keyboard-noise periods → saves power and flash.
+
+### Speaker diarization, identification & relational profiling (see ADR-014)
+- Every transcript is **speaker-attributed**: pyannote.audio diarizes turns,
+  faster-whisper transcribes, words align to turns.
+- **ECAPA-TDNN voice embeddings** identify recurring people across recordings vs a
+  **known-voice library**. Unknown voices auto-cluster; you label a cluster once in
+  the dashboard ("this voice = wife") and future audio auto-tags.
+- Speaker-attributed text makes intents attributable ("**wife** asked X") and builds
+  **relational profiles** (topics, emotional tone, recurring asks, recency).
+- All on the homelab GPU. ⚠️ Profiling people's voices is sensitive — consent &
+  retention policy is an open question (Q-S5).
 
 ### Storage: encode on-device (can't store raw)
 - 16 kHz/16-bit raw ≈ 115 MB/hr → 128 MB holds ~1 hr. Not viable.

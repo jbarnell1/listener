@@ -5,6 +5,17 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-014 — Speaker diarization, identification & relational profiling
+**2026-06-03.** Resolves issue #1. Every transcript is **speaker-attributed** and
+the pipeline builds **per-person relational profiles**. Stack (homelab GPU):
+**pyannote.audio** diarization + **SpeechBrain ECAPA-TDNN** 192-d voice embeddings
+for cross-recording ID, aligned to faster-whisper word timestamps. Unknown voices
+**auto-cluster**; the user labels a cluster once in the dashboard and future audio
+auto-tags by name. Speaker-attributed text feeds the (now speaker-aware) LLM intent
+split and accumulates profiles (topics, emotion, recurring asks, recency). **Built
+into Phase 4 core.** Chose direct pyannote+ECAPA over WhisperX (more control) and
+over vosk (GPU accuracy ≫ vosk's lighter CPU x-vectors). Opens Q-S5/Q-S6/Q-S7.
+
 ### ADR-013 — Firmware in Arduino (arduino-esp32), not ESP-IDF
 **2026-06-03.** Chosen for faster bring-up and the rich Arduino library ecosystem
 (WiFiManager, HTTPClient, ESP_I2S). Uses arduino-esp32 core v3.x. Trade-off: a bit
@@ -109,6 +120,13 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
   emails. Confirm the Google Workspace account + intended tagging scheme.
 - **Q-S3: LLM for intent split** — local model vs Gemini API? Privacy vs quality.
 - **Q-S4: Audio retention policy** — keep raw audio how long after transcription?
+- **Q-S5: Voice-profile consent & retention** (ADR-014) — third parties haven't
+  opted in. Retention of embeddings, `do_not_profile` list, delete-a-person,
+  local-only guarantee (voice data never leaves the homelab).
+- **Q-S6: Speaker-match threshold** — cosine sim to call a voice "the same person"
+  (~0.7–0.8) + min samples/turn-length before enrolling/auto-naming a cluster.
+- **Q-S7: pyannote model access** — gated HuggingFace models; need an HF account +
+  accept the model terms to download (one-time setup).
 
 ### Firmware (block before Phase 3)
 - *Resolved:* Q-F1 → ADR-013 (Arduino / arduino-esp32 v3.x).

@@ -13,14 +13,23 @@ Pre-made breakout (Teyleten, board ≈ 0.55 × 0.47 in). Two 1×3 through-hole h
 - **Alt mount (good for acoustics): wire-out.** Mount the mic at the enclosure's
   sound opening, run 6 thin wires to a simple **1×6 landing strip** on the board.
   Removes the spacing problem and puts the port right at the case hole.
-| Module pad | Net |
-|-----------|-----|
-| VDD | `3V3` |
-| GND | `GND` |
-| SCK | `I2S_BCLK` (GPIO4) |
-| WS  | `I2S_WS` (GPIO5) |
-| SD  | `I2S_SD` (GPIO6) |
-| L/R | `GND` → selects the **left** channel (firmware reads left) |
+Header pin assignment (two 1×3 facing each other, pins 1-1/2-2/3-3 aligned):
+
+**Left header (SCK/WS/L-R row):** `1→I2S_BCLK (SCK)`, `2→I2S_WS (WS)`, `3→GND (L/R)`
+**Right header (SD/VDD/GND row):** `1→I2S_SD (SD)`, `2→3V3 (VDD)`, `3→GND (GND)`
+
+| Module pad | Net | GPIO |
+|-----------|-----|------|
+| SCK | `I2S_BCLK` | GPIO4 |
+| WS  | `I2S_WS` | GPIO5 |
+| SD  | `I2S_SD` | GPIO6 |
+| L/R | `GND` (low = left channel) | — |
+| VDD | `3V3` | — |
+| GND | `GND` | — |
+
+Flip-proofing: both **Pin 2** = center pads (WS, VDD) → mirror-proof; both **Pin 3**
+= GND. Only Pin 1's (BCLK↔SD) could swap on a flip — signals only, no short risk.
+Ignore the seller's GPIO14/32/15; the S3 routes I2S to any GPIO via our nets.
 - Module has its own decoupling; an optional 0.1µF at the VDD pad is harmless.
 - MCU is I2S **master** (drives BCLK/WS); mic is slave (drives SD). No series Rs.
 - **Layout:** mic port (center can/hole) must face the **enclosure mic opening**,

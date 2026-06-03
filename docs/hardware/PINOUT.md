@@ -40,11 +40,18 @@ GPIOs — which **frees GPIO9 and GPIO14**.
 > strapping/USB and keep routing short to the mic.
 
 ## User interface
-| Function | GPIO | Notes |
-|----------|------|-------|
-| BOOT button | GPIO0 | strapping, internal/ext pull-up |
-| USER / push-to-talk | GPIO1 | active-low, ext 10k pull-up |
-| MODE button | GPIO2 | cycles VAD/continuous/mute |
+| Button (silkscreen) | Connects to | Function |
+|---------------------|-------------|----------|
+| **RESET** | EN | resets the chip (EN low = reset) |
+| **BOOT** | GPIO0 | flash/download mode (strapping; hold at reset) |
+| **REC** (USER/PTT) | GPIO1 | record / push-to-talk; active-low, 10k pull-up |
+| **MODE** | GPIO2 | cycles VAD / continuous / mute |
+
+> Label by NET, not SW#: annotation numbers SW1–4 arbitrarily. RESET≠BOOT — EN is
+> reset, GPIO0 is boot. Put REC/MODE on an accessible face; BOOT/RESET can recess.
+
+| Other | GPIO | Notes |
+|-------|------|-------|
 | LED recording (red) | GPIO15 | + series R |
 | LED status (green) | GPIO16 | + series R |
 | Battery sense (ADC) | GPIO7 | ADC1_CH6, via divider; add 100nF |

@@ -8,8 +8,11 @@ In EasyEDA Pro: **Convert schematic → PCB**. All parts come in with a ratsnest
 (thin lines showing required connections). Set 2-layer board to start.
 
 ## 1. Placement — the golden rule
-**Decoupling caps touch their IC's power pin, smallest cap closest, with a GND via
-right at the cap's ground pad.** Place each IC, then immediately cluster its passives.
+**Decoupling caps close to their IC's power pin, smallest cap closest, with a GND
+via right at the cap's ground pad.** Place each IC, then immediately cluster its
+passives. "Close" = within a few mm + a short (~1mm) trace — do NOT abut the pads
+(hand-assembly needs clearance to avoid solder bridging). The short loop + the GND
+via at the cap matter more than literal contact.
 
 ### Decoupling placement (by designator)
 | IC | At the pin | Pin |

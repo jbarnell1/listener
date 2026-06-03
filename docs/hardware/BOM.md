@@ -58,6 +58,7 @@ Paste-ready cart. Quantities assume building 2–3 boards.
 | **0603 LEDs** red + green (+ optional blue) | status/record/charge indicators | 10 ea |
 | **1.2k 0603** resistor | TP4056 Rprog → 1A charge | 10 |
 | **P-MOSFET** AO3401A / DMG2305UX (SOT-23) | load-share Q1 (ADR-011, Q-H10) | 5 |
+| **2.4GHz U.FL/IPEX antenna** | WROOM-**1U** has no PCB antenna — needs external | 2–3 |
 
 ### Already on hand — no need to buy
 - 0603 R: **470** (LED series + TP4056 status LEDs), **5.1k** (USB-C CC1/CC2),

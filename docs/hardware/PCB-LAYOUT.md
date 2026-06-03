@@ -59,6 +59,16 @@ right at the cap's ground pad.** Place each IC, then immediately cluster its pas
 - Top edge: mic at the case opening, module U.FL end facing this edge, LEDs visible.
 - Left edge: the four buttons.
 
+## 1c. Resistor placement
+Most resistors are **not** placement-critical (unlike decoupling caps) — pull-ups,
+LED series, EN/BOOT/NAND pull-ups can go in a "field," arranged for least crossover.
+A resistor's function doesn't depend on trace length. **Keep local anyway:**
+- **5.1k CC resistors** → at the USB-C connector.
+- **Q1 gate R's (10k/220k)** → at the MOSFET gate (compact gate node).
+- **Battery divider R7/R8 (220k) + C5 (100nF)** → keep the high-impedance `SENSE`
+  net SHORT, C5 near the GPIO7 ADC pin (long high-Z traces pick up noise).
+- Otherwise group each resistor near the IC it serves to minimize ratsnest sprawl.
+
 ## 2. Placement strategy (clusters)
 - **Power cluster** (one corner near the USB-C edge): USB-C → D1 → U1 → load-share
   → U2. Keeps high-current loops tight.

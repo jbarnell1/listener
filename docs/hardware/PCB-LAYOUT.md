@@ -84,8 +84,10 @@ A resistor's function doesn't depend on trace length. **Keep local anyway:**
   room for the U.FL connector + cable at the module's antenna edge.
 
 ## 3. Routing
-- **Power nets wider:** VBUS/VBAT/VSYS/3V3 ~0.4–0.5mm (1A charge path); signals
-  ~0.2–0.25mm.
+- **Power nets wider:** VBUS/VBAT/VSYS/3V3 ~0.5mm (1A charge path); signals
+  ~0.2–0.25mm. Set width while routing (or per-net under the **Track** rule) — NOT
+  via copper weight. **Copper thickness (1oz/2oz) ≠ trace width**; 1oz is fine here,
+  2oz just costs more. 0.5mm on 1oz carries ~1.5A.
 - **Ground:** copper **pour GND on both layers**, stitch with vias; solid ground
   under the MCU and SPI/I2S signals (short return paths).
 - Keep SPI (SCK/MOSI/MISO/CS) and I2S short and roughly equal; keep them away from

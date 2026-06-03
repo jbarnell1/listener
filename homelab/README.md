@@ -11,18 +11,28 @@ Everything runs in WSL2. We use **`uv`** for packaging and keep the venv in WSL'
 # 1. install uv (once)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 2. create the venv (native FS)
+# 2. transcription venv (faster-whisper / CUDA 12)
 uv venv ~/listener-venv --python 3.10
-
-# 3. install deps
 cd /mnt/c/Listener/homelab
 uv pip install --python ~/listener-venv/bin/python -r requirements.txt
+
+# 3. diarization venv (pyannote + torch / CUDA 13) — SEPARATE on purpose
+uv venv ~/listener-diar --python 3.10
+uv pip install --python ~/listener-diar/bin/python -r requirements-diar.txt
+sudo apt install -y ffmpeg   # torchcodec needs the libav* libs
 ```
 
-> GPU note: cuBLAS/cuDNN come from the `nvidia-*` pip wheels — **no system CUDA
-> toolkit needed**. The scripts `ctypes`-preload them, so you never set
-> `LD_LIBRARY_PATH`. Requires the NVIDIA CUDA-on-WSL driver (check: `nvidia-smi`
-> works inside WSL).
+> **Why two venvs?** CTranslate2 (faster-whisper) needs **CUDA 12** cuDNN; torch
+> (pyannote) needs **CUDA 13** cuDNN. In one venv they collide
+> (`CUDNN_STATUS_SUBLIBRARY_VERSION_MISMATCH`). Separate venvs = no conflict, and
+> it matches the production design (transcriber + diarizer are separate workers).
+>
+> GPU note: faster-whisper's cuBLAS/cuDNN come from `nvidia-*` pip wheels — **no
+> system CUDA toolkit needed**; `transcribe.py` `ctypes`-preloads them (no
+> `LD_LIBRARY_PATH`). Requires the NVIDIA CUDA-on-WSL driver (`nvidia-smi` works in WSL).
+>
+> Diarization needs a HuggingFace token (`hf auth login`) + accepting the gated
+> model `pyannote/speaker-diarization-community-1`.
 
 ## H1 — transcription ✅
 ```bash
@@ -35,11 +45,20 @@ cd /mnt/c/Listener/homelab
 Expected: the JFK quote, **RTF ≈ 0.05 (~20× real-time)** on GPU. Swap `small.en`
 → `large-v3` for production accuracy (one-word change).
 
+## H3.5 — diarization ✅
+```bash
+cd /mnt/c/Listener/homelab
+~/listener-diar/bin/python diarize.py samples/jfk.wav
+```
+Prints `SPEAKER_00 / SPEAKER_01 / ...` turns with timestamps. JFK (1 speaker) →
+one speaker; use a 2-person clip to see it split. Uses `community-1` (open, but
+gated — accept its HF terms once).
+
 ## Milestone status (PIPELINE.md H1–H6)
 - [x] **H1** — WSL2 + CUDA + faster-whisper transcribes a WAV
 - [ ] H2 — FastAPI `/ingest` (verify HMAC, store, ACK)
 - [ ] H3 — transcriber worker → SQLite
-- [ ] H3.5 — pyannote diarization (needs HF token — Q-S7)
+- [x] **H3.5** — pyannote diarization (community-1, GPU)
 - [ ] H3.6 — ECAPA embeddings + speaker ID/cluster
 - [ ] H4 — speaker-aware LLM intent split (Ollama; model from 12GB shortlist)
 - [ ] H5 — APScheduler timed email + daily 6 AM summary

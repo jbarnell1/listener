@@ -27,6 +27,11 @@ Runs on the i5 + RTX 4070 Super. Detailed code lands in Phase 4.
 6. **Dashboard (PWA)** — label unknown speaker clusters, review/edit profiles +
    context, conversational edit agent.
 
+> **Environments gotcha:** transcription (CTranslate2 / CUDA 12) and diarization
+> + torch (CUDA 13) run in **separate venvs / processes** — their cuDNN versions
+> collide in one env (`CUDNN_STATUS_SUBLIBRARY_VERSION_MISMATCH`). Matches the
+> separate-workers design. Setup in `homelab/README.md`.
+
 ## Data model (SQLite, draft)
 ```
 chunks(id, device, seq, ts_start, codec, bytes, path, acked, transcribed)

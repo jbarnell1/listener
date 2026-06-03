@@ -1,0 +1,18 @@
+# Listener homelab — diarization / speaker-ID stack (H3.5/H3.6).
+#
+# SEPARATE venv from the transcription stack (requirements.txt): torch needs
+# CUDA 13 cuDNN, while CTranslate2 (faster-whisper) needs CUDA 12 cuDNN, and the
+# two collide in one venv (CUDNN_STATUS_SUBLIBRARY_VERSION_MISMATCH). Keeping them
+# in separate venvs matches the production design (transcriber + diarizer are
+# separate workers).
+#
+# Setup (WSL2):
+#   uv venv ~/listener-diar --python 3.10
+#   uv pip install --python ~/listener-diar/bin/python -r requirements-diar.txt
+#
+# Also needs a HuggingFace token (`hf auth login`) + accepting the gated model at
+#   https://huggingface.co/pyannote/speaker-diarization-community-1
+# pyannote.audio pulls torch / torchaudio / torchcodec automatically.
+# (torchcodec needs system ffmpeg: `sudo apt install ffmpeg`.)
+
+pyannote.audio==4.0.4

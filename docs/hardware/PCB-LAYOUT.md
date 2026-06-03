@@ -37,13 +37,14 @@ right at the cap's ground pad.** Place each IC, then immediately cluster its pas
 - **Mic headers:** near the enclosure mic opening, away from power/antenna.
 
 ## 1b. Board outline + floorplan (decided)
-- **Outline: 85 × 54 mm**, 2-layer, ~3mm rounded corners, **M2 holes in 4 corners**.
-- **Battery stacked behind**: 407090 3000mAh, **92×70×4mm** (JST-PH2.0). It is
-  **larger than the board (85×54)**, so the **battery sets the device footprint
-  (~92×70mm)**; the board mounts on top of it with margin. All components on the
-  **TOP layer**, bottom kept flat for the pack (foam tape) + ground pour. Single-
-  sided assembly = cheaper. (Board could grow toward ~88×62 for more routing room
-  at no size cost, but 85×54 is plenty here.)
+- **Outline: 87 × 65 mm**, 2-layer, ~3mm rounded corners, **M2 holes in 4 corners**.
+- **Battery stacked behind**: 407090 3000mAh, **92×70×4mm** (JST-PH2.0). The board
+  (87×65) sits just **inside** the battery footprint (~2.5mm margin each side), so
+  the **battery sets the device size (~92×70mm)** while the board uses the full
+  area for easy routing. Still the cheapest JLCPCB tier (≤100×100mm).
+- All components on the **TOP layer**; bottom kept flat for the pack (foam tape) +
+  ground pour. Single-sided assembly = cheaper.
+- Put the **JST connector near the battery's pigtail exit** (one 70mm end).
 ```
  ┌──────────────────────────────────────────────────────────┐
  │ [MIC hdrs]                          U.FL→  [LED1][LED2]    │

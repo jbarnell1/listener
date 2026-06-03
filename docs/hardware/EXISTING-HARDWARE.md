@@ -24,7 +24,7 @@ For passives, list values + footprint + rough quantity. For ICs/modules, the
 - Charge controller: TP4056 (module / bare IC) or PMIC `bare IC? I just used my own from resistors/capacitors and AP2112k/ESD protector, so battery can wire in or usbc can charge/power if needed` — Qty: None (build our own?)
 - LDO 3.3V: AP2112K-3.3 / MCP1700-3302 / other `AP2112K-3.3TRG1, C23380830` — Qty: 3
 - ESD protection: USBLC6-2SC6 or `C2827654 (yes USBLC6-2SC6)` — Qty: 3
-- Battery: 407090 3.7V 3000mAh LiPo, 92×70×4mm, JST-PH2.0 (Amazon, ordering) — larger than the 85×54 board; sets the ~92×70mm device footprint
+- Battery: 407090 3.7V 3000mAh LiPo, 92×70×4mm, JST-PH2.0 (Amazon, ordering) — board grown to 87×65 to sit just inside it; device footprint ~92×70mm
 - also have a diode called 1N58 19WS 40V 1A surface mount SOD-323 C191023
 
 ## User interface

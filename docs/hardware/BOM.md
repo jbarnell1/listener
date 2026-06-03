@@ -54,12 +54,13 @@ Paste-ready cart. Buy ~3–5× each (building up to 3 boards; LCSC has order min
 | **TP4056** charger | C5311018 | 1 | U1 |
 | **AO3401A** P-MOSFET | C15127 | 1 | Q1 |
 | **1.2kΩ** 0603 | C22765 | 1 | R1 (PROG) |
+| **220kΩ** 0603 | C22961 | 3 | R7, R8, R10 (divider + Q1 gate pulldown) |
 | **Red LED** KT-0603R | C2286 | 2 | REC, STDBY |
 | **Green LED** KT-0603G | C12624 | 2 | CHRG, STATUS |
 | **1×3 header** 2.54 | C52016391 | 2 | H1, H2 (or reuse mic-module pins) |
 | **INMP441 breakout module** | Amazon | have | mic (ADR-012) |
 | **407090 3000mAh LiPo** | Amazon | ordered | power |
-| **2.4GHz U.FL antenna** | LCSC/Amazon | 1 | U5 (NOT in board BOM — external) |
+| **2.4GHz U.FL antenna** | — | have | on hand from prior project |
 
 ### Already on hand — exact LCSC match
 100nF (C14663), 1µF (C15849), 10µF (C19702), 470Ω (C23179), JST S2B-PH (C173752),
@@ -70,11 +71,12 @@ NAND (C17656808), AP2112K (C23380830), tact switch (C49234125).
 - **5.1kΩ**: have C2907044 (BOM auto-picked C23186) → use yours (R2, R4).
 - **10kΩ**: have C98220 (BOM auto-picked C25804) → use yours (R6, R9, R11–R18).
 
-### ⚠️ Verify before ordering
-- **220kΩ (R7/R8/R10):** confirm on-hand `C22962` is **kΩ not Ω**. Any matched
-  high value (220k–240k) is fine (divider stays ÷2, low drain). 220 **Ω** would
-  drain the battery ~1000× faster → then buy 220kΩ (C22961).
-- Have but **unused** by this design: 100µF (C15008), 4.7µF (C19666).
+### Notes
+- On-hand `C22962` confirmed = **220 Ω (not kΩ)** → unused by design; **must buy
+  220kΩ** (C22961). Can't sub 10k: gate pulldown R10 needs to be ≫ the 10k gate
+  series, and the divider needs low drain.
+- U.FL antenna: **on hand** from a prior project.
+- Have but **unused** by this design: 100µF (C15008), 4.7µF (C19666), 220Ω (C22962).
 
 ## Answers to inventory questions
 - **Inductors / ferrite beads:** not required. The AP2112K is a *linear* LDO (no

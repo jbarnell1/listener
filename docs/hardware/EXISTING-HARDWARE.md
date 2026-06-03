@@ -37,7 +37,7 @@ Resistors (value : qty) — fill the ones you have:
 - 5.1k (USB-C CC): lots
 - 10k (pull-ups): lots
 - 1k / 330 / 220 (LED series): ____
-- 220k (battery divider): lots
+- 220 OHM (C22962): lots — NOTE: this is 220Ω not 220k; design needs 220kΩ (buy C22961)
 - charge Rprog (1.2k≈1A, 2k≈580mA, 5k≈250mA): ____
 - others: ____
 

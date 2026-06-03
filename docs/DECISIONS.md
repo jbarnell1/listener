@@ -85,6 +85,9 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
   outline assumed. Affects mic port, button/LED placement, antenna keep-out.
 - **Q-H7: INMP441 mic — NOT on hand (qty 0).** On the LCSC shopping list; confirm
   buy qty (suggest 3). Blocks audio bring-up.
+- **Q-H11: Mic part + assembly.** Confirm INMP441 (top-port) is in LCSC/JLCPCB
+  stock for assembly; else pick a stocked I2S MEMS equivalent (MSM261S4030H0R /
+  ICS-43434 / SPH0645). Enclosure needs an opening above the top port.
 - *Resolved:* Q-H8 → ADR-011 (TP4056). Q-H9 → ADR-011 (P-MOSFET load-share).
   Q-H10 → **AO3401A** confirmed (G=1, S=2, D=3) for load-share Q1.
 

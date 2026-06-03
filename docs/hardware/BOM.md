@@ -51,7 +51,8 @@ Paste-ready cart. Quantities assume building 2–3 boards.
 
 | Item | Why | Suggested qty |
 |------|-----|---------------|
-| **INMP441 I2S mic** | audio input — none on hand (Q-H7) | 3–5 |
+| **INMP441 breakout module** (Amazon 5-pack ~$12) | audio input (ADR-012) — mounts on 2×(1×3) header | have |
+| **2×(1×3) header / female socket** for the mic module | on-board mount (ADR-012) | 2 rows |
 | **TP4056** charge IC (SOP-8) | LiPo charging — LDO can't (ADR-008) | 5 |
 | **3.7V 3000mAh protected LiPo** + **JST-PH 2.0** pigtail | power (ADR-008) | 1–2 |
 | **JST-PH 2.0 SMD socket** (board side, right-angle) | battery connector | 5 |

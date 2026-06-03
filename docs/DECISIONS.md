@@ -5,6 +5,15 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-012 — INMP441 as a pre-made module on a 2×(1×3) header
+**2026-06-02.** Mount the INMP441 breakout module (Amazon 5-pack ~$12) on the main
+board via **two 1×3 through-hole headers** at the module's measured row spacing
+(2.54mm within each row), instead of placing a bare INMP441 MEMS chip. Rationale:
+avoids MEMS reflow + acoustic-port assembly risk and JLCPCB stock uncertainty,
+beginner-friendly, cheap; the module handles its own decoupling + acoustic port.
+Deliberately relaxes the original "no breakout boards" guideline **for the mic
+only**. Tradeoff: taller/bulkier + a hand-assembly step. Closes Q-H7, Q-H11.
+
 ### ADR-011 — Power path: TP4056 charging + P-MOSFET load-share
 **2026-06-02.** Chosen over the Hub board's diode-OR (which never charged the cell)
 and over plain TP4056 (load-sharing problem). USB-C charges the LiPo in place via
@@ -83,11 +92,8 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
   Q-H6 → **void**: reference boards are from an unrelated old project, not reused.
 - **Q-H5: Form factor / wearable enclosure** — pendant? clip? Credit-card-ish
   outline assumed. Affects mic port, button/LED placement, antenna keep-out.
-- **Q-H7: INMP441 mic — NOT on hand (qty 0).** On the LCSC shopping list; confirm
-  buy qty (suggest 3). Blocks audio bring-up.
-- **Q-H11: Mic part + assembly.** Confirm INMP441 (top-port) is in LCSC/JLCPCB
-  stock for assembly; else pick a stocked I2S MEMS equivalent (MSM261S4030H0R /
-  ICS-43434 / SPH0645). Enclosure needs an opening above the top port.
+- *Resolved:* Q-H7 + Q-H11 → ADR-012 (INMP441 breakout module on a 2×(1×3)
+  header; measure row spacing with calipers; mic port faces the enclosure opening).
 - *Resolved:* Q-H8 → ADR-011 (TP4056). Q-H9 → ADR-011 (P-MOSFET load-share).
   Q-H10 → **AO3401A** confirmed (G=1, S=2, D=3) for load-share Q1.
 

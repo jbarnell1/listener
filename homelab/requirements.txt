@@ -1,0 +1,14 @@
+# Listener homelab — H1 (transcription). Direct deps; faster-whisper pulls
+# ctranslate2, av (PyAV/ffmpeg), tokenizers, onnxruntime, numpy automatically.
+#
+# Setup (WSL2 Ubuntu):
+#   curl -LsSf https://astral.sh/uv/install.sh | sh
+#   uv venv ~/listener-venv --python 3.10
+#   uv pip install --python ~/listener-venv/bin/python -r requirements.txt
+#
+# The nvidia-* wheels supply cuBLAS/cuDNN so NO system CUDA toolkit is needed —
+# the WSL GPU driver + these wheels are enough. Scripts preload them via ctypes.
+
+faster-whisper==1.2.1
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cudnn-cu12==9.23.0.39

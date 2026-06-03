@@ -108,7 +108,13 @@ A resistor's function doesn't depend on trace length. **Keep local anyway:**
 - **Gerbers** (fab), **BOM**, **CPL/Pick-and-place** (assembly).
 - For JLCPCB assembly: match LCSC part numbers in the BOM; mark hand-placed/
   through-hole parts (mic module, JST, buttons, headers) as needed.
-- Order: 2-layer, 1.6mm (or thinner for a slim wearable), HASL or ENIG.
+- **JLCPCB order (recommended):** 2-layer, **5 pcs** (min/cheapest), **1.6mm**
+  (or 1.0mm slimmer), **ENIG** finish (flat pads — best for hotplate-reflowing the
+  WSON NAND + module fine pitch; HASL works but isn't flat), **1oz** copper, green.
+  Use EasyEDA's "Order at JLCPCB" one-click. **Preview Gerbers before submit**
+  (outline closed, silkscreen readable, pours correct).
+- We're hand-assembling → **bare boards only** (no CPL/assembly, skip device
+  standardization). Closing ritual first: rebuild pours → DRC clean → order.
 
 ## Open
 - Final board outline / size (credit-card-ish) + mounting + enclosure.

@@ -50,6 +50,17 @@ schedule_jobs(...)   -- APScheduler's own job store table
 - Daily "Day Ahead" (6 AM): grouped sections (Today, Upcoming, Context notes).
 - Exact tagging scheme + transport: **Q-S2**.
 
+## Build-up milestones (all testable WITHOUT hardware — feed a recorded WAV)
+| # | Milestone |
+|---|-----------|
+| H1 | WSL2 env + CUDA + faster-whisper transcribes a sample WAV |
+| H2 | FastAPI `/ingest` — receive file, verify HMAC, store, return ACK |
+| H3 | Transcriber worker — watch store → whisper → transcript to SQLite |
+| H4 | LLM intent split → `{action, due_at, tier}` rows |
+| H5 | APScheduler → timed email (e.g. 7 PM) + daily 6 AM summary (Gmail/SMTP) |
+| H6 | PWA dashboard + conversational context editor |
+- H1→H5 prove the whole transcribe→split→schedule→email flow before any board arrives.
+
 ## Security
 - HMAC verify on ingest; reject stale timestamps (replay).
 - Audio retention policy: **Q-S4**.

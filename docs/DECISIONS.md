@@ -5,6 +5,12 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-013 — Firmware in Arduino (arduino-esp32), not ESP-IDF
+**2026-06-03.** Chosen for faster bring-up and the rich Arduino library ecosystem
+(WiFiManager, HTTPClient, ESP_I2S). Uses arduino-esp32 core v3.x. Trade-off: a bit
+less low-level control than IDF, acceptable here. W25N01 NAND needs a custom/adapted
+SPI driver (no clean Arduino lib). Closes Q-F1. Encoding (Opus vs ADPCM) still Q-F2.
+
 ### ADR-012 — INMP441 as a pre-made module on a 2×(1×3) header
 **2026-06-02.** Mount the INMP441 breakout module (Amazon 5-pack ~$12) on the main
 board via **two 1×3 through-hole headers** at the module's measured row spacing
@@ -105,6 +111,6 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
 - **Q-S4: Audio retention policy** — keep raw audio how long after transcription?
 
 ### Firmware (block before Phase 3)
-- **Q-F1: Arduino vs ESP-IDF?** ESP-IDF gives better I2S/PSRAM/power control;
-  Arduino is faster to start. (Hand-off leaned ESP-IDF.)
-- **Q-F2: Opus vs ADPCM** for v1 — depends on CPU/power headroom + PSRAM.
+- *Resolved:* Q-F1 → ADR-013 (Arduino / arduino-esp32 v3.x).
+- **Q-F2: Opus vs ADPCM** for v1 — start ADPCM/raw to get the pipeline working,
+  add Opus later for compression. Depends on CPU/power headroom + PSRAM.

@@ -13,19 +13,18 @@ one's open questions are resolved enough to avoid rework.
 - [ ] User exports the two EasyEDA reference boards into `hardware/reference/`
 - **Done when:** docs reviewed and inventory confirmed.
 
-## Phase 2 — Hardware Design (EasyEDA Pro → JLCPCB)
-1. Block diagram → finalized **pinout table** (`hardware/PINOUT.md`)
-2. Schematic: power (USB-C + charge + LDO), MCU, NAND, mic, UI
-3. Footprint + LCSC part matching against on-hand stock
-4. PCB layout (placement, routing, ground pour, antenna keep-out)
-5. DRC + fab/assembly export → JLCPCB order
-- **Done when:** Gerbers + BOM + CPL exported and design-rule-checked.
+## Phase 2 — Hardware Design (EasyEDA Pro → JLCPCB)  ✅ DONE (2026-06-03)
+Schematic (3 sheets) → 87×65mm 2-layer PCB → DRC clean → Gerbers → **5 boards
+ordered at JLCPCB**; LCSC + Amazon parts ordered. ~2 week lead time. See
+`hardware/PCB-LAYOUT.md`, `BOM.md`.
 
-## Phase 3 — Firmware (ESP32-S3)
-- I2S mic capture → pre-roll ring buffer → VAD gate → Opus/ADPCM encode
-- Chunked writes to Winbond NAND (wear-aware)
+## Phase 3 — Firmware (ESP32-S3, **Arduino** — ADR-013)  ⬅️ *next*
+- I2S mic capture → pre-roll ring buffer → VAD gate → ADPCM(→Opus) encode
+- Chunked writes to Winbond NAND (custom W25N01 SPI driver, wear-aware)
 - Connectivity ladder (home WiFi → hotspot/Funnel) + signed HTTPS upload
 - Captive-portal provisioning, button modes, LED states, battery monitor
+- Milestones M1–M8 in `firmware/FIRMWARE-OVERVIEW.md`; M1–M4/M6/M7 prototype on
+  the on-hand ESP32 DevKit V1 while boards ship.
 - **Done when:** device records, buffers offline, and uploads on reconnect.
 
 ## Phase 4 — Homelab Pipeline (Python)

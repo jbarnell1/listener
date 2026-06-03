@@ -2,11 +2,37 @@
 
 Detailed code lands in Phase 3. This is the plan the code will follow.
 
-## Framework
-- Leaning **ESP-IDF** (better I2S/DMA, PSRAM, power, and SPI NAND driver
-  control we need). Arduino-as-component possible if we want Arduino libs.
-- NAND is **standard SPI single-bit** (ADR-010), not quad — simpler driver.
-- Decision pending: **Q-F1**.
+## Framework — Arduino (ADR-013)
+- **arduino-esp32 core v3.x.** Board = ESP32S3 Dev Module, PSRAM = OPI, Flash = 16MB,
+  USB CDC On Boot = Enabled.
+- NAND is **standard SPI single-bit** (ADR-010) — custom/adapted W25N01 driver.
+
+## Libraries
+| Need | Library |
+|------|---------|
+| I2S mic | `ESP_I2S.h` (core 3.x) |
+| WiFi + upload | `WiFi.h`, `WiFiClientSecure.h`, `HTTPClient.h` |
+| Config/secrets in NVS | `Preferences.h` |
+| Captive-portal provisioning | WiFiManager (tzapu) |
+| HMAC-SHA256 signing | mbedTLS (bundled) |
+| W25N01 NAND | custom thin SPI driver (page R/W, block erase, ECC, bad-block) |
+| Encoding | ADPCM (DIY) for v1; Opus later (Q-F2) |
+
+## Build-up milestones (each independently testable)
+| # | Milestone | DevKit-testable? |
+|---|-----------|------------------|
+| M1 | Blink + serial + WiFi connect | ✅ |
+| M2 | HTTP POST a test payload to homelab | ✅ |
+| M3 | I2S capture from INMP441 → print RMS | ✅ (remap pins) |
+| M4 | VAD gate + pre-roll ring buffer | ✅ |
+| M5 | W25N01 driver: page R/W, append-log, ECC/bad-block | needs chip |
+| M6 | Encode chunk (ADPCM) + WAV/bin framing | ✅ |
+| M7 | Upload: signed POST, delete-on-ACK, offline retry | ✅ |
+| M8 | UX: provisioning, buttons, LED states, battery ADC, light-sleep | partial |
+
+> Prototype caveat: on-hand boards are **ESP32 DevKit V1 (classic ESP32)** — no
+> native USB, usually no PSRAM, different GPIOs. Good for M1–M4/M6/M7 logic; the
+> real S3 board is needed for M5 (NAND) + final M8.
 
 ## Task / data flow
 ```

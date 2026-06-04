@@ -98,8 +98,8 @@ schedule_jobs(...)   -- APScheduler's own job store table
 | # | Milestone |
 |---|-----------|
 | H1 | WSL2 env + CUDA + faster-whisper transcribes a sample WAV |
-| H2 | FastAPI `/ingest` — receive file, verify HMAC, store, return ACK |
-| H3 | Transcriber worker — whisper → transcript to SQLite |
+| **H2** | **/ingest** verifies HMAC, stores the chunk as a queue item, ACKs instantly (ADR-025) |
+| **H3** | **worker.py** drains the queue end-to-end (normalize→wordattribute→intents→profiles), GPU-gated (ADR-025) |
 | **H3.5** | **pyannote diarization** → speaker-attributed `segments` |
 | **H3.6** | **ECAPA embeddings + ID/cluster** → `speakers`/`embeddings`; profiles |
 | H4 | **Speaker-aware** LLM intent split → `intents` (+ profile_updates) |

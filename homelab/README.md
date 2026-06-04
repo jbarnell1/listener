@@ -134,6 +134,19 @@ removes their tasks, profile, voiceprint, and their lines in every transcript;
 transcripts left empty (and their audio) are removed, shared conversations keep the
 other speakers. UI-only with a confirm — deliberately **not** an assistant tool.
 
+## Pipeline worker — ingest queue → end-to-end, GPU-gated (ADR-025)
+`/ingest` stores each uploaded chunk as a queue item (`transcribed=0`) and ACKs
+instantly. `worker.py` drains the queue: ffmpeg-normalize → `wordattribute`
+(WhisperX + diarize + ID) → `intents` → `profiles` → done — one chunk at a time,
+and only when the **GPU gate** (`gpu_gate.py`, reads the Windows `nvidia-smi.exe`)
+is clear, so it never fights a game (ADR-015). Backlog self-heals after downtime.
+Managed like the MCP server (auto-starts; restart/stop from Settings). Default ASR
+model `large-v3` (`LISTENER_ASR_MODEL`). Drive it without hardware:
+```bash
+python ingest_send.py samples/two.wav    # sign + POST a WAV like the device will
+python worker.py --once samples/two.wav  # or process one file directly
+```
+
 **Remote (phone) access — Tailscale Serve (tailnet-only, no public exposure):**
 ```bash
 tailscale serve --bg 8000      # → https://<machine>.<tailnet>.ts.net

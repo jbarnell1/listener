@@ -5,6 +5,24 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-025 — End-to-end pipeline worker + GPU gate
+**2026-06-04.** `/ingest` is a **queue handoff**, not synchronous processing: it
+stores the chunk (`transcribed=0`) and ACKs instantly, and a background **worker**
+(`worker.py`) drains the queue end-to-end — ffmpeg-normalize → `wordattribute`
+(WhisperX + diarize + ID) → `intents` → `profiles` → mark done — one chunk at a time.
+Chunks persist until processed, so a PC that was **off or gaming self-heals** its
+backlog on the next clear window. The **GPU gate** (`gpu_gate.py`, implements
+ADR-015) reads the Windows `nvidia-smi.exe` over WSL interop and defers when a game
+is running. **Refines ADR-015's threshold:** `util>40%` stays the primary "is a game
+rendering" signal, but the free-VRAM floor is lowered **6 GB → 3 GB** — this box's
+baseline (Windows desktop + the resident Ollama model the pipeline itself needs,
+≈5–6 GB) already leaves <6 GB free with no game, so a 6 GB floor would defer forever.
+The worker is managed like the MCP server (autostart + Settings restart/stop, so it's
+revivable remotely). Default ASR model = **large-v3**. Implements H2/H3. (Also fixed:
+renamed `profile.py`→`profiles.py` — it shadowed Python's stdlib `profile`, breaking
+`transformers`/`torch` imports in the CUDA venvs; pinned `transformers==4.48.0` since
+4.57 broke whisperx's import path.)
+
 ### ADR-024 — Email transport: local SMTP + Gmail App Password; nightly brief 23:50
 **2026-06-04.** Outbound email is a **local `smtplib` SSL client** to
 `smtp.gmail.com:465` authenticated with a **Google App Password** — not a

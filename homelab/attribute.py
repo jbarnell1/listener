@@ -32,13 +32,13 @@ def run_json(python: str, script: str, *args: str):
     raise SystemExit(f"no JSON from {script} (exit {proc.returncode})")
 
 
-def speaker_for(seg, turns):
-    """The speaker (name if identified) whose turns overlap this segment most."""
-    best, best_overlap = "?", 0.0
+def best_turn(seg, turns):
+    """The diarization turn (name + speaker_id) overlapping this segment most."""
+    best, best_overlap = None, 0.0
     for t in turns:
         overlap = max(0.0, min(seg["end"], t["end"]) - max(seg["start"], t["start"]))
         if overlap > best_overlap:
-            best_overlap, best = overlap, t.get("name", t["speaker"])
+            best_overlap, best = overlap, t
     return best
 
 
@@ -46,19 +46,32 @@ def main() -> None:
     audio = sys.argv[1] if len(sys.argv) > 1 else "samples/two.wav"
     model = sys.argv[2] if len(sys.argv) > 2 else "small.en"
 
-    print(f"[1/2] transcribing      (CUDA-12 venv) ...", file=sys.stderr, flush=True)
+    print("[1/2] transcribing      (CUDA-12 venv) ...", file=sys.stderr, flush=True)
     segments = run_json(WHISPER_PY, "transcribe.py", audio, model)
-    print(f"[2/2] diarize+identify  (CUDA-13 venv) ...", file=sys.stderr, flush=True)
+    print("[2/2] diarize+identify  (CUDA-13 venv) ...", file=sys.stderr, flush=True)
     turns = run_json(DIAR_PY, "identify.py", audio)
 
+    import db  # persist one transcript + its speaker-attributed segments
+    conn = db.init_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO transcripts(audio_path, lang) VALUES (?, ?)", (audio, "en"))
+    tid = cur.lastrowid
+
     print(f"\n=== Speaker-attributed transcript: {audio} ===")
-    last_speaker = None
+    last = None
     for seg in segments:
-        spk = speaker_for(seg, turns)
-        if spk != last_speaker:
-            print(f"\n{spk}:")
-            last_speaker = spk
+        t = best_turn(seg, turns) or {}
+        label = t.get("name", "?")
+        cur.execute("INSERT INTO segments(transcript_id, speaker_id, t_start, t_end, text)"
+                    " VALUES (?,?,?,?,?)",
+                    (tid, t.get("speaker_id"), seg["start"], seg["end"], seg["text"]))
+        if label != last:
+            print(f"\n{label}:")
+            last = label
         print(f"  [{seg['start']:6.2f}] {seg['text']}")
+    conn.commit()
+    print(f"\nsaved transcript #{tid} ({len(segments)} segments) -> listener.db",
+          file=sys.stderr)
 
 
 if __name__ == "__main__":

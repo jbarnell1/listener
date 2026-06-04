@@ -32,7 +32,10 @@ Runs on the i5 + RTX 4070 Super. Detailed code lands in Phase 4.
 > collide in one env (`CUDNN_STATUS_SUBLIBRARY_VERSION_MISMATCH`). Matches the
 > separate-workers design. Setup in `homelab/README.md`.
 
-## Data model (SQLite, draft)
+## Data model (SQLite — implemented in `homelab/db.py`)
+> Status: schema live; `speakers`/`embeddings` populated (ECAPA voiceprints as
+> float32 BLOBs); `attribute.py` persists `transcripts`/`segments`. `chunks`/
+> `profiles`/`intents` defined, populated as H2/H4 land.
 ```
 chunks(id, device, seq, ts_start, codec, bytes, path, acked, transcribed)
 transcripts(id, chunk_id, text, words_json, lang, created_at)

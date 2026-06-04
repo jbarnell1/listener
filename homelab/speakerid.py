@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""H3.6 — ECAPA speaker embeddings + a tiny JSON speaker library.
+"""H3.6 — ECAPA speaker embeddings + a SQLite-backed speaker library.
 
 Used by enroll.py (add a named voiceprint) and identify.py (match diarized
-speakers against the library). Runs in the diarization venv (~/listener-diar).
+speakers, persistently clustering unknowns). Runs in the diarization venv.
+Embeddings are stored as float32 BLOBs in the `embeddings` table (see db.py).
 """
-import json
 import os
 
 import numpy as np
@@ -12,8 +12,9 @@ import torch
 import torchaudio
 from speechbrain.inference.speaker import EncoderClassifier
 
+import db
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(HERE, "speakers.json")
 MATCH_THRESHOLD = 0.40  # cosine to call it the same person (Q-S6, tunable)
 
 _MODEL = None
@@ -33,7 +34,7 @@ def ecapa() -> EncoderClassifier:
 def _load_mono16k(path: str):
     sig, sr = torchaudio.load(path)
     if sig.shape[0] > 1:
-        sig = sig.mean(dim=0, keepdim=True)            # → mono
+        sig = sig.mean(dim=0, keepdim=True)
     if sr != 16000:
         sig = torchaudio.functional.resample(sig, sr, 16000)
         sr = 16000
@@ -59,29 +60,90 @@ def cosine(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-9))
 
 
+def _to_blob(emb) -> bytes:
+    return np.asarray(emb, dtype=np.float32).tobytes()
+
+
+def _from_blob(blob) -> np.ndarray:
+    return np.frombuffer(blob, dtype=np.float32)
+
+
 class SpeakerDB:
-    """JSON-backed name → centroid embedding store."""
+    """SQLite-backed name → centroid-embedding store (replaces the old JSON file)."""
 
-    def __init__(self, path: str = DB_PATH):
-        self.path = path
-        self.people = {}
-        if os.path.exists(path):
-            with open(path) as f:
-                self.people = {k: np.array(v) for k, v in json.load(f).items()}
+    def __init__(self, path: str = db.DB_PATH):
+        self.conn = db.init_db(path)
 
-    def save(self) -> None:
-        with open(self.path, "w") as f:
-            json.dump({k: v.tolist() for k, v in self.people.items()}, f)
+    @staticmethod
+    def label(sid: int, name) -> str:
+        return name if name else f"Unknown_{sid}"
 
-    def enroll(self, name: str, emb: np.ndarray) -> None:
-        # running-mean centroid update as more samples of a person arrive
-        self.people[name] = (self.people[name] + emb) / 2.0 if name in self.people else emb
-        self.save()
+    def _centroids(self):
+        rows = self.conn.execute(
+            "SELECT s.id, s.name, e.id AS eid, e.vec, e.n_samples "
+            "FROM speakers s JOIN embeddings e "
+            "ON e.speaker_id = s.id AND e.is_centroid = 1"
+        ).fetchall()
+        return rows
 
-    def identify(self, emb: np.ndarray, threshold: float = MATCH_THRESHOLD):
-        best, score = None, -1.0
-        for name, ref in self.people.items():
-            c = cosine(emb, ref)
-            if c > score:
-                best, score = name, c
-        return (best, score) if score >= threshold else (None, score)
+    def _upsert_centroid(self, speaker_id: int, emb: np.ndarray, source: str) -> None:
+        cur = self.conn.cursor()
+        row = cur.execute(
+            "SELECT id, vec, n_samples FROM embeddings "
+            "WHERE speaker_id=? AND is_centroid=1", (speaker_id,)).fetchone()
+        if row:  # running-mean update of the centroid
+            n = row["n_samples"]
+            new = (_from_blob(row["vec"]) * n + emb) / (n + 1)
+            cur.execute("UPDATE embeddings SET vec=?, n_samples=? WHERE id=?",
+                        (_to_blob(new), n + 1, row["id"]))
+        else:
+            cur.execute(
+                "INSERT INTO embeddings(speaker_id, vec, dim, is_centroid, n_samples, source)"
+                " VALUES (?,?,?,1,1,?)", (speaker_id, _to_blob(emb), int(len(emb)), source))
+
+    def enroll(self, name: str, emb: np.ndarray) -> int:
+        cur = self.conn.cursor()
+        row = cur.execute("SELECT id FROM speakers WHERE name=?", (name,)).fetchone()
+        if row:
+            sid = row["id"]
+        else:
+            cur.execute("INSERT INTO speakers(name, status) VALUES (?, 'enrolled')", (name,))
+            sid = cur.lastrowid
+        self._upsert_centroid(sid, emb, "enroll")
+        cur.execute("UPDATE speakers SET status='enrolled', updated_at=datetime('now')"
+                    " WHERE id=?", (sid,))
+        self.conn.commit()
+        return sid
+
+    def identify(self, emb: np.ndarray, threshold: float = MATCH_THRESHOLD,
+                 create_unknown: bool = True):
+        """Return (label, score, speaker_id). Persistently clusters unknowns: a
+        non-matching voice becomes a new 'unknown' speaker, so the SAME voice in a
+        later recording matches the SAME Unknown_N (label it later → recognized)."""
+        best = (None, None, -1.0)  # (sid, name, score)
+        for r in self._centroids():
+            c = cosine(emb, _from_blob(r["vec"]))
+            if c > best[2]:
+                best = (r["id"], r["name"], c)
+        sid, name, score = best
+        if sid is not None and score >= threshold:
+            return self.label(sid, name), score, sid
+        if create_unknown:
+            cur = self.conn.cursor()
+            cur.execute("INSERT INTO speakers(status) VALUES ('unknown')")
+            new_sid = cur.lastrowid
+            self._upsert_centroid(new_sid, emb, "auto")
+            self.conn.commit()
+            return self.label(new_sid, None), score, new_sid
+        return None, score, None
+
+    def rename(self, speaker_id: int, name: str) -> None:
+        """Label an Unknown (the dashboard action) → becomes recognized everywhere."""
+        self.conn.execute(
+            "UPDATE speakers SET name=?, status='enrolled', updated_at=datetime('now')"
+            " WHERE id=?", (name, speaker_id))
+        self.conn.commit()
+
+    def list_speakers(self):
+        return self.conn.execute(
+            "SELECT id, name, status FROM speakers ORDER BY id").fetchall()

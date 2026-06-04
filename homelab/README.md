@@ -77,6 +77,20 @@ gitignored — it's biometric). All in the **diarization venv**.
 ~<0.3). Match threshold = 0.40 (Q-S6, in `speakerid.py`). Unknown speakers get
 `Unknown_xx` → label later in the dashboard → auto-recognized after.
 
+## Storage — SQLite (`listener.db`, gitignored: transcripts + voiceprints)
+Schema in `db.py` (full PIPELINE.md model: speakers, embeddings, chunks,
+transcripts, segments, profiles, intents). Voiceprints are float32 BLOBs in
+`embeddings`; unknown voices auto-persist as `status='unknown'` speakers so the
+same voice re-matches across recordings (`rename()` to label them).
+```bash
+~/listener-diar/bin/python db.py        # init + row-count summary
+# attribute.py now PERSISTS each run (transcript + speaker-linked segments):
+~/listener-venv/bin/python attribute.py samples/two.wav small.en
+~/listener-venv/bin/python show.py      # read latest transcript back (JOIN names)
+```
+Why not a vector DB? Speaker matching is cosine over a handful of people — instant
+in numpy. SQLite is the right tool until there are thousands of speakers.
+
 ## Milestone status (PIPELINE.md H1–H6)
 - [x] **H1** — WSL2 + CUDA + faster-whisper transcribes a WAV
 - [ ] H2 — FastAPI `/ingest` (verify HMAC, store, ACK)

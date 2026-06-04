@@ -12,7 +12,7 @@ secrets.*
 *.raw
 *.pcm
 *.bin
-listener.db
+listener.db*
 *.sqlite
 *.sqlite3
 chunks/

@@ -27,7 +27,7 @@ def main() -> None:
     log("Loading diarization pipeline + speaker DB ...")
     pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-community-1")
     pipeline.to(torch.device("cuda"))
-    db = SpeakerDB()
+    sdb = SpeakerDB()
 
     output = pipeline(audio)
     ann = output if hasattr(output, "itertracks") else getattr(output, "speaker_diarization", output)
@@ -37,15 +37,18 @@ def main() -> None:
     for turn, _, spk in ann.itertracks(yield_label=True):
         per_speaker.setdefault(spk, []).append((turn.start, turn.end))
 
-    names = {}
+    names, sids = {}, {}
     for spk, turns in per_speaker.items():
         emb = embed_segments(audio, turns)
-        name, score = db.identify(emb) if emb is not None else (None, 0.0)
-        names[spk] = name or f"Unknown_{spk[-2:]}"
-        log(f"  {spk} -> {names[spk]}  (best cosine {score:.2f})")
+        if emb is None:
+            names[spk], sids[spk] = f"Unknown_{spk[-2:]}", None
+            continue
+        label, score, sid = sdb.identify(emb)
+        names[spk], sids[spk] = label, sid
+        log(f"  {spk} -> {label}  (best cosine {score:.2f})")
 
     rows = [{"start": round(t.start, 2), "end": round(t.end, 2),
-             "speaker": spk, "name": names[spk]}
+             "speaker": spk, "name": names[spk], "speaker_id": sids.get(spk)}
             for t, _, spk in ann.itertracks(yield_label=True)]
 
     if as_json:

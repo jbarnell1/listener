@@ -10,6 +10,7 @@ Usage:
     python intents.py [transcript_id]      # from listener.db, stores intents
     python intents.py --demo               # built-in sample convo (with tasks)
 """
+import difflib
 import json
 import sys
 import urllib.request
@@ -87,6 +88,56 @@ def conversation_for(tid):
     return "\n".join(f"{r['who']}: {r['text']}" for r in rows)
 
 
+# --- de-duplication: one intent per real-world thing, across all conversations ---
+SIM_THRESHOLD = 0.82
+
+
+def _norm(s):
+    return " ".join((s or "").lower().split())
+
+
+def _sim(a, b):
+    return difflib.SequenceMatcher(None, _norm(a), _norm(b)).ratio()
+
+
+def _local_date(iso):
+    """Local calendar day of a UTC ISO timestamp (the dedup bucket); None if no date."""
+    if not iso:
+        return None
+    try:
+        return datetime.fromisoformat(iso).astimezone(TZ).date().isoformat()
+    except ValueError:
+        return None
+
+
+def find_duplicate(conn, action, due_iso):
+    """Is there already an OPEN intent for the same thing? Same day-bucket (or both
+    undated) + similar action text. Different day = distinct (e.g. weekly trash)."""
+    bucket = _local_date(due_iso)
+    for r in conn.execute(
+            "SELECT id, action, due_at FROM intents WHERE status != 'dismissed'").fetchall():
+        if _local_date(r["due_at"]) == bucket and _sim(action, r["action"]) >= SIM_THRESHOLD:
+            return r["id"]
+    return None
+
+
+def dedupe_existing(conn, verbose=True):
+    """One-time cleanup: collapse already-stored duplicates (keep oldest, dismiss rest)."""
+    kept, removed = [], 0
+    for r in conn.execute("SELECT id, action, due_at FROM intents "
+                          "WHERE status != 'dismissed' ORDER BY id").fetchall():
+        if any(_local_date(k["due_at"]) == _local_date(r["due_at"])
+               and _sim(r["action"], k["action"]) >= SIM_THRESHOLD for k in kept):
+            conn.execute("UPDATE intents SET status='dismissed' WHERE id=?", (r["id"],))
+            removed += 1
+        else:
+            kept.append(r)
+    conn.commit()
+    if verbose:
+        print(f"dedupe: dismissed {removed} duplicate(s), kept {len(kept)} open intent(s)")
+    return removed
+
+
 def _get_or_create_speaker(cur, name):
     r = cur.execute("SELECT id FROM speakers WHERE name=?", (name,)).fetchone()
     if r:
@@ -120,24 +171,34 @@ def run_for_transcript(conn, tid, verbose=False):
     raw = ollama_chat(system, convo)
     data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
     intents = data.get("intents", [])
+    stored = []
     for it in intents:
         due = to_utc(it.get("due_local"), it.get("due_text"), now_local)
+        due_iso = due.isoformat() if due else None
+        if find_duplicate(conn, it.get("action"), due_iso):    # already tracked → skip
+            if verbose:
+                print(f"  (dup, skipped) {it.get('action')}")
+            continue
         sp = conn.execute("SELECT id FROM speakers WHERE name=?",
                           (it.get("speaker"),)).fetchone()
         conn.execute(
             "INSERT INTO intents(speaker_id, action, kind, tier, due_at, status, source_quote)"
             " VALUES (?,?,?,?,?, 'pending', ?)",
             (sp["id"] if sp else None, it.get("action"), it.get("kind"), it.get("tier"),
-             due.isoformat() if due else None, it.get("source_quote")))
+             due_iso, it.get("source_quote")))
+        stored.append(it)
         if verbose:
             due_str = due.strftime("%Y-%m-%d %H:%M UTC") if due else "(no time)"
             print(f"  [{it.get('kind')}/{it.get('tier')}] {it.get('action')}  "
                   f"({it.get('speaker')}, due {due_str})")
     conn.commit()
-    return intents
+    return stored
 
 
 def main():
+    if "--dedup" in sys.argv:                  # one-time cleanup of existing duplicates
+        dedupe_existing(db.connect())
+        return
     demo = "--demo" in sys.argv
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
 

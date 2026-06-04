@@ -18,8 +18,11 @@ item also appears as a heads-up in the nightly digest; per-action timed emails a
 Password (ADR-024) is **SMTP-only** and does NOT reach these APIs; consumer Gmail can't
 use a service account for Tasks, so it's user-OAuth (consent screen must be **Published**
 or the refresh token dies in 7 days). Intents carry `calendar_event_id`/`gtask_id`/
-`synced_at` so re-processing never double-books; the worker pushes after profiling and
-no-ops safely until connected.
+`synced_at` so re-processing never re-pushes the *same row*; the worker pushes after
+profiling and no-ops safely until connected. **Semantic dedup** runs at *insert* time
+(`intents.py`): a new intent is dropped if an open one with a similar action
+(difflib ≥0.82) falls on the same local day — so repeated mentions and references to
+the same event across different conversations collapse to a single event/task.
 
 ### ADR-025 — End-to-end pipeline worker + GPU gate
 **2026-06-04.** `/ingest` is a **queue handoff**, not synchronous processing: it

@@ -1,7 +1,25 @@
 {% extends "base.html" %}
 {% block body %}
 <h1 class="page">Transcript #{{ t.id }}</h1>
-<p class="sub">{{ t.audio_path }} · {{ t.created_at }}</p>
+<p class="sub">{{ t.created_at|localtime }}</p>
+
+<div class="card">
+  <h2>Topics</h2>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+    {% for tg in tags %}
+      <span class="chip" style="display:inline-flex;align-items:center;gap:5px">
+        <a href="/topics/{{ tg.id }}" style="color:inherit">#{{ tg.name }}</a>
+        <a href="#" onclick="document.getElementById('untag-{{ tg.id }}').submit();return false"
+           style="color:var(--muted)">✕</a></span>
+      <form id="untag-{{ tg.id }}" method="post" action="/transcripts/{{ t.id }}/untag/{{ tg.id }}" style="display:none"></form>
+    {% else %}<span class="muted">No topics yet</span>{% endfor %}
+  </div>
+  <form method="post" action="/transcripts/{{ t.id }}/tag" class="field" style="margin-top:10px">
+    <input name="name" list="alltags" placeholder="Add a topic…" autocomplete="off">
+    <datalist id="alltags">{% for t2 in all_tags %}<option value="{{ t2.name }}">{% endfor %}</datalist>
+    <button class="btn ghost">Add</button>
+  </form>
+</div>
 
 <div class="card">
   {% for b in blocks %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">Topics</h1>
+<p class="sub">What you talk about, gathered across conversations. Tap one to follow that subject over time.</p>
+{% for t in tags %}
+  <a href="/topics/{{ t.id }}" class="card" style="display:block;color:inherit">
+    <div class="name" style="font-size:1.04rem">#{{ t.name }}
+      <span class="muted">· {{ t.n }} snippet{{ '' if t.n == 1 else 's' }}</span></div>
+    {% if t.summary %}<div class="muted" style="margin-top:4px">{{ t.summary|truncate(180) }}</div>{% endif %}
+    {% if t.last_at %}<div class="muted" style="font-size:.75rem;margin-top:6px">last heard {{ t.last_at|localtime }}</div>{% endif %}
+  </a>
+{% else %}
+  <div class="card"><div class="empty">No topics yet — they form automatically as conversations are processed.</div></div>
+{% endfor %}
+{% endblock %}

@@ -132,6 +132,31 @@ def get_transcript(transcript_id: int) -> dict:
             "lines": [{"who": s["who"], "text": s["text"]} for s in segs]}
 
 
+def list_tags() -> list:
+    """List all topic tags (subjects discussed), each with a running summary and how
+    many snippets it spans. Use this to discover available topics, then call get_topic
+    to answer 'what did we decide/say about <subject>' questions."""
+    return [{"name": t["name"], "summary": t["summary"], "snippets": t["n"]}
+            for t in db.list_tags(db.connect())]
+
+
+def get_topic(topic: str) -> dict:
+    """Get everything captured under a topic tag: its running summary + the actual
+    conversation snippets, so you can answer questions like 'what are our must-haves
+    for the next house?'. `topic` is a tag name (from list_tags) or its id."""
+    c = db.connect()
+    tag = db.get_tag(c, topic)
+    if not tag:
+        return {"error": f"no topic matching '{topic}'"}
+    out = {"topic": tag["name"], "summary": tag["summary"], "snippets": []}
+    for s in db.tag_transcripts(c, tag["id"])[:20]:
+        lines = db.transcript_segments(c, s["id"])
+        out["snippets"].append({
+            "id": s["id"], "when": s["created_at"], "who": s["who"],
+            "text": " ".join(f"{ln['who']}: {ln['text']}" for ln in lines)[:1500]})
+    return out
+
+
 def set_relationship(speaker: str, relationship: str) -> dict:
     """Set a speaker's relationship to the device owner (e.g. 'wife', 'coworker',
     'friend', 'mother'), or 'myself' to mark them AS the owner (exclusive).
@@ -208,5 +233,6 @@ TOOLS = [
     list_unknown_speakers,
     list_tasks, dismiss_task,
     list_transcripts, get_transcript,
+    list_tags, get_topic,
     google_status,
 ]

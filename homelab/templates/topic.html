@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">#{{ tag.name }}</h1>
+<p class="sub">{{ snippets|length }} snippet{{ '' if snippets|length == 1 else 's' }} across your conversations.</p>
+
+{% if tag.summary %}
+<div class="card">
+  <h2>What's been said</h2>
+  <p style="margin:0;white-space:pre-wrap">{{ tag.summary }}</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Snippets</h2>
+  {% for s in snippets %}
+    <a href="/transcripts/{{ s.id }}" class="row" style="color:inherit;--hue:{{ s.id|hue }}">
+      <div class="av">🎙️</div>
+      <div class="grow">
+        <div class="name">{{ s.who or 'Conversation #' ~ s.id }}</div>
+        <div class="muted">{{ s.n_segments }} segments · {{ s.created_at|localtime }}</div>
+      </div>
+      <span class="chevron">›</span>
+    </a>
+  {% else %}<div class="empty">No snippets under this topic.</div>{% endfor %}
+</div>
+
+<div class="card">
+  <h2>Manage topic</h2>
+  <form method="post" action="/topics/{{ tag.id }}/rename" class="field" style="margin-bottom:10px">
+    <input name="name" value="{{ tag.name }}">
+    <button class="btn ghost">Rename</button>
+  </form>
+  {% if all_tags %}
+  <form method="post" action="/topics/{{ tag.id }}/merge" class="field"
+        onsubmit="return confirm('Merge #{{ tag.name }} into the selected topic? This cannot be undone.')">
+    <select name="target">
+      {% for t in all_tags %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+    </select>
+    <button class="btn ghost">Merge into →</button>
+  </form>{% endif %}
+</div>
+{% endblock %}

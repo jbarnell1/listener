@@ -334,7 +334,53 @@ def transcript(request: Request, tid: int):
         if not blocks or blocks[-1]["sid"] != s["speaker_id"]:
             blocks.append({"sid": s["speaker_id"], "who": s["who"], "lines": []})
         blocks[-1]["lines"].append({"t": s["t_start"], "text": s["text"]})
-    return page("transcript.html", request, active=None, t=t, blocks=blocks)
+    return page("transcript.html", request, active=None, t=t, blocks=blocks,
+                tags=db.transcript_tag_list(c, tid), all_tags=db.list_tags(c))
+
+
+@app.get("/topics", response_class=HTMLResponse)
+def topics(request: Request):
+    return page("topics.html", request, active="topics", tags=db.list_tags(db.connect()))
+
+
+@app.get("/topics/{ref}", response_class=HTMLResponse)
+def topic(request: Request, ref: str):
+    c = db.connect()
+    tag = db.get_tag(c, ref)
+    if not tag:
+        raise HTTPException(404)
+    return page("topic.html", request, active="topics", tag=tag,
+                snippets=db.tag_transcripts(c, tag["id"]),
+                all_tags=[t for t in db.list_tags(c) if t["id"] != tag["id"]])
+
+
+@app.post("/transcripts/{tid}/tag")
+def add_transcript_tag(tid: int, name: str = Form("")):
+    c = db.connect()
+    nm = name.strip().lower()
+    if nm:
+        db.tag_transcript(c, tid, db.get_or_create_tag(c, nm))
+        c.commit()
+    return RedirectResponse(f"/transcripts/{tid}", status_code=303)
+
+
+@app.post("/transcripts/{tid}/untag/{tag_id}")
+def remove_transcript_tag(tid: int, tag_id: int):
+    db.untag_transcript(db.connect(), tid, tag_id)
+    return RedirectResponse(f"/transcripts/{tid}", status_code=303)
+
+
+@app.post("/topics/{tag_id}/rename")
+def topic_rename(tag_id: int, name: str = Form("")):
+    if name.strip():
+        db.rename_tag(db.connect(), tag_id, name.strip().lower())
+    return RedirectResponse(f"/topics/{tag_id}", status_code=303)
+
+
+@app.post("/topics/{tag_id}/merge")
+def topic_merge(tag_id: int, target: int = Form(...)):
+    db.merge_tags(db.connect(), tag_id, target)
+    return RedirectResponse(f"/topics/{target}", status_code=303)
 
 
 @app.get("/unknown", response_class=HTMLResponse)

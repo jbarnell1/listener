@@ -84,10 +84,22 @@ CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+CREATE TABLE IF NOT EXISTS tags (
+  id         INTEGER PRIMARY KEY,
+  name       TEXT NOT NULL UNIQUE COLLATE NOCASE,   -- topic label (ADR-029)
+  summary    TEXT,                                  -- LLM-maintained running digest
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS transcript_tags (
+  transcript_id INTEGER NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE,
+  tag_id        INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  PRIMARY KEY (transcript_id, tag_id)
+);
 """
 
 TABLES = ["speakers", "embeddings", "chunks", "transcripts",
-          "segments", "profiles", "intents", "meta"]
+          "segments", "profiles", "intents", "meta", "tags"]
 
 
 def connect(path: str = DB_PATH) -> sqlite3.Connection:
@@ -425,6 +437,78 @@ def queue_stats(conn):
         "SUM(transcribed=-1) AS failed FROM chunks").fetchone()
     return {"pending": row["pending"] or 0, "done": row["done"] or 0,
             "failed": row["failed"] or 0}
+
+
+# --- topic tags (multi-label per transcript; LLM-assigned) — ADR-029 ---
+
+def get_or_create_tag(conn, name):
+    name = name.strip()
+    r = conn.execute("SELECT id FROM tags WHERE name=? COLLATE NOCASE", (name,)).fetchone()
+    if r:
+        return r["id"]
+    return conn.execute("INSERT INTO tags(name) VALUES(?)", (name,)).lastrowid
+
+
+def set_tag_summary(conn, tag_id, summary):
+    conn.execute("UPDATE tags SET summary=?, updated_at=datetime('now') WHERE id=?",
+                 (summary, tag_id))
+
+
+def tag_transcript(conn, tid, tag_id):
+    conn.execute("INSERT OR IGNORE INTO transcript_tags(transcript_id, tag_id) VALUES(?,?)",
+                 (tid, tag_id))
+
+
+def untag_transcript(conn, tid, tag_id):
+    conn.execute("DELETE FROM transcript_tags WHERE transcript_id=? AND tag_id=?", (tid, tag_id))
+    conn.commit()
+
+
+def list_tags(conn):
+    return conn.execute(
+        "SELECT t.id, t.name, t.summary, COUNT(tt.transcript_id) AS n, "
+        "MAX(tr.created_at) AS last_at "
+        "FROM tags t LEFT JOIN transcript_tags tt ON tt.tag_id = t.id "
+        "LEFT JOIN transcripts tr ON tr.id = tt.transcript_id "
+        "GROUP BY t.id ORDER BY (COUNT(tt.transcript_id) = 0), last_at DESC, t.name").fetchall()
+
+
+def get_tag(conn, ref):
+    s = str(ref).strip()
+    if s.isdigit():
+        return conn.execute("SELECT * FROM tags WHERE id=?", (int(s),)).fetchone()
+    return conn.execute("SELECT * FROM tags WHERE name=? COLLATE NOCASE", (s,)).fetchone()
+
+
+def tag_transcripts(conn, tag_id):
+    return conn.execute(
+        "SELECT tr.id, tr.created_at, COUNT(s.id) AS n_segments, "
+        "(SELECT GROUP_CONCAT(DISTINCT COALESCE(sp.name, 'Unknown_' || sp.id)) "
+        " FROM segments s2 JOIN speakers sp ON sp.id = s2.speaker_id "
+        " WHERE s2.transcript_id = tr.id) AS who "
+        "FROM transcript_tags tt JOIN transcripts tr ON tr.id = tt.transcript_id "
+        "LEFT JOIN segments s ON s.transcript_id = tr.id "
+        "WHERE tt.tag_id = ? GROUP BY tr.id ORDER BY tr.id DESC", (tag_id,)).fetchall()
+
+
+def transcript_tag_list(conn, tid):
+    return conn.execute(
+        "SELECT t.id, t.name FROM tags t JOIN transcript_tags tt ON tt.tag_id = t.id "
+        "WHERE tt.transcript_id = ? ORDER BY t.name", (tid,)).fetchall()
+
+
+def merge_tags(conn, src_id, dst_id):
+    """Fold tag src into dst: move its transcript links, delete src."""
+    conn.execute("INSERT OR IGNORE INTO transcript_tags(transcript_id, tag_id) "
+                 "SELECT transcript_id, ? FROM transcript_tags WHERE tag_id=?", (dst_id, src_id))
+    conn.execute("DELETE FROM tags WHERE id=?", (src_id,))
+    conn.commit()
+
+
+def rename_tag(conn, tag_id, name):
+    conn.execute("UPDATE tags SET name=?, updated_at=datetime('now') WHERE id=?",
+                 (name.strip(), tag_id))
+    conn.commit()
 
 
 if __name__ == "__main__":

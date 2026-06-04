@@ -5,6 +5,15 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-022 — Word-level speaker attribution via WhisperX
+**2026-06-03.** Segment-level merging mis-tagged words on Whisper segments that
+straddle a speaker change. Fix = **word-level**: **WhisperX** (faster-whisper +
+wav2vec2 forced alignment) yields tight per-word timestamps; each word is assigned
+to its diarization turn, then regrouped → segments split exactly at boundaries (and
+per-speaker embeddings get cleaner). WhisperX pins torch to **CUDA 12 (cu128)** so
+it coexists with CTranslate2 in one venv (`~/listener-wx`). `wordattribute.py`
+supersedes `attribute.py`. True simultaneous/overlapping speech stays the hard limit.
+
 ### ADR-021 — Retention: audio 30 days, transcripts indefinite
 **2026-06-03.** Raw **audio kept 30 days** (enough to replay snippets for speaker
 tagging/re-tagging), then auto-purged by a daily job. **Transcripts, segments,

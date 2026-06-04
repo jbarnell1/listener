@@ -1,0 +1,9 @@
+# Listener homelab — WhisperX word-level attribution (~listener-wx venv).
+#
+# WhisperX pins torch to a CUDA-12 build (cu128), so torch + CTranslate2 share
+# CUDA-12 cuDNN in ONE process (no conflict — unlike the diar venv's cu13 torch).
+#   uv venv ~/listener-wx --python 3.10
+#   uv pip install --python ~/listener-wx/bin/python -r requirements-wx.txt
+# Forced alignment (wav2vec2) model downloads on first run (open, no gating).
+
+whisperx==3.8.6

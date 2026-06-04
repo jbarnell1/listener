@@ -58,9 +58,16 @@ gated — accept its HF terms once).
 ```bash
 ~/listener-venv/bin/python attribute.py samples/two.wav small.en
 ```
-`attribute.py` runs both engines as subprocesses (separate venvs) and merges by
-timestamp overlap → "SPEAKER_00: …". *TODO (production):* word-level attribution
-(`word_timestamps=True`) so boundary-straddling segments split correctly.
+`attribute.py` runs both engines as subprocesses and merges by *segment* overlap.
+**Superseded by word-level (ADR-022):** `wordattribute.py` uses **WhisperX** forced
+alignment (`~/listener-wx` venv, `requirements-wx.txt`) for per-word timestamps,
+assigns each word to its diarization turn, and regroups — so segments split exactly
+at speaker changes:
+```bash
+uv venv ~/listener-wx --python 3.10
+uv pip install --python ~/listener-wx/bin/python -r requirements-wx.txt
+~/listener-web/bin/python wordattribute.py samples/two.wav small.en
+```
 
 ## H3.6 — speaker identity (ECAPA) ✅
 ECAPA 192-d voiceprints + a tiny JSON library name → centroid (`speakers.json`,

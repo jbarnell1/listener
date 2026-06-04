@@ -18,17 +18,13 @@ at first.
 - **Conversational editor**: a chat box that drives an agent to edit the SQLite
   context ("merge these two people", "forget that note", "move trash to 8 PM").
 
-### 3. Immediate notifications — Tasker
-- Homelab posts a webhook (or sends a tagged email) for fired SOON actions;
-  Tasker turns it into a phone notification / action.
-- This is the "arrives timely" path on the phone side.
+### 3. Notifications — Google Calendar / Tasks + email (ADR-027)
+- The homelab pushes dated reminders to **Google Calendar (events) / Tasks (to-dos)**
+  (ADR-026) and sends a nightly **email digest** of undated follow-ups (ADR-024).
+- Google fires the reminders across all your devices and Gemini's daily review
+  surfaces them — so **no Tasker recipe and no phone app are needed**.
 
-## Deferred: Flutter app (only if needed)
-- Justified only if you want **live BLE** status (recording indicator, battery,
-  push-to-talk from the phone) when away from the dashboard.
-- Bridges BLE (control/status) → HTTP/gRPC to homelab. Larger build; revisit
-  after v1 proves the pipeline.
-
-## Open
-- Confirm Tasker is acceptable, or whether you'd rather get notifications purely
-  via email/Workspace (then no Tasker needed).
+## Dropped (ADR-027): Tasker + Flutter
+- Tasker is unnecessary now that Google handles delivery. The Flutter app (live BLE
+  status / push-to-talk) is dropped too — revisit only if live BLE status is ever
+  wanted. Phone involvement = captive-portal provisioning + the tailnet PWA only.

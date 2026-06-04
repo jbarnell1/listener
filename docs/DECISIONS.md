@@ -5,6 +5,16 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-027 — Drop Tasker & Flutter; notifications via Google + email
+**2026-06-04.** No phone-side notification app. Reminders are delivered by **Google
+Calendar/Tasks** (ADR-026) and the nightly **email digest** (ADR-024) — both already
+surfaced by Gemini's daily review across the user's devices — so ADR-005's Tasker
+recipes and the (deferred) Flutter app are unnecessary. Phone involvement is now just
+the ESP32 captive-portal for WiFi provisioning + the tailnet dashboard (PWA).
+**Supersedes the Tasker/Flutter portion of ADR-005.** Separately, ADR-021's 30-day
+audio purge is now implemented (`purge.py`; daily 3 AM scheduler job — audio deleted,
+transcripts/profiles kept).
+
 ### ADR-026 — Intent routing: Google Calendar/Tasks for reminders, email = digest
 **2026-06-04.** Time-based reminders move to **Google** (Calendar + Tasks) instead of
 us emailing at a set time: Google fires the reminder across all devices, the homelab

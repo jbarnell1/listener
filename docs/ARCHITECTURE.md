@@ -92,11 +92,11 @@ phase docs implement it.
   the next-morning Google Daily Brief; ADR-024). Dated items also appear as a heads-up.
 - This decouples reminder delivery from our box being awake at reminder time.
 
-### Phone: minimal now, extensible later
+### Phone: minimal (no app — ADR-027)
 - ESP32 **captive-portal** for WiFi/hotspot/token provisioning (no app).
 - Homelab-served **PWA** (reached over your tailnet) for context review/edit.
-- **Tasker** for immediate-action notifications.
-- Optional **Flutter** app later for live BLE status.
+- Notifications come from **Google Calendar/Tasks + the email digest** (ADR-026/024) —
+  no Tasker, no Flutter (ADR-027).
 
 ## Trust / security boundaries
 - Device holds a per-device secret; every POST is HMAC-signed + timestamped

@@ -40,8 +40,8 @@ ordered at JLCPCB**; LCSC + Amazon parts ordered. ~2 week lead time. See
 - **Done when:** a speaker-attributed utterance produces a correctly-timed email.
 
 ## Phase 5 — Phone/Provisioning polish
-- Captive-portal flow refined; Tasker recipes for immediate actions
-- (Optional, later) Flutter app for live BLE status
+- Captive-portal provisioning flow refined (the only phone-side piece)
+- Notifications via Google Calendar/Tasks + email digest — no Tasker, no Flutter (ADR-027)
 
 ## Working agreement
 - Every non-obvious choice gets logged in `DECISIONS.md`.

@@ -29,6 +29,7 @@ import db
 import google_sync
 import gpu_gate
 import mailer
+import purge
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -98,7 +99,9 @@ async def lifespan(_app):
     scheduler.add_job(mailer.send_daily_brief,
                       CronTrigger(hour=BRIEF_HOUR, minute=BRIEF_MIN),
                       id="daily_brief", replace_existing=True, misfire_grace_time=3600)
-    scheduler.start()     # nightly email brief
+    scheduler.add_job(purge.purge_old_audio, CronTrigger(hour=3, minute=0),
+                      id="audio_purge", replace_existing=True, misfire_grace_time=7200)
+    scheduler.start()     # nightly email brief + 3 AM audio purge (ADR-021)
     yield
     scheduler.shutdown(wait=False)
     worker_mgr.stop()

@@ -8,6 +8,16 @@ the in-process fallback. Pure DB ops — no raw SQL exposed to the model.
 import db
 
 
+def _resolve_speaker(c, ref):
+    """Resolve a speaker by numeric id OR (case-insensitive) name."""
+    s = str(ref).strip()
+    if s.isdigit():
+        return db.get_speaker(c, int(s))
+    return c.execute(
+        "SELECT *, COALESCE(name, 'Unknown_' || id) AS label FROM speakers "
+        "WHERE lower(name) = lower(?) ORDER BY id LIMIT 1", (s,)).fetchone()
+
+
 def list_speakers() -> list:
     """List every speaker (known and unknown) with id, name, status, segment count."""
     return [{"id": r["id"], "name": r["name"], "label": r["label"],
@@ -25,6 +35,26 @@ def get_speaker(speaker_id: int) -> dict:
             "status": sp["status"], "relationship": sp["relationship"],
             "tasks": [{"id": t["id"], "action": t["action"], "tier": t["tier"],
                        "due_at": t["due_at"]} for t in db.speaker_intents(c, speaker_id)]}
+
+
+def get_speaker_profile(speaker: str) -> dict:
+    """Get the evolving profile the system has learned about a speaker: a summary,
+    their relationship, emotional trend, recurring topics/habits, and durable facts.
+    Use this to answer 'what do you know about <person>' style questions.
+    `speaker` may be the person's NAME (e.g. 'Sarah') or their numeric id."""
+    c = db.connect()
+    sp = _resolve_speaker(c, speaker)
+    if not sp:
+        return {"error": f"no speaker matching '{speaker}'"}
+    prof = db.get_profile(c, sp["id"])
+    if not prof:
+        return {"speaker_id": sp["id"], "name": sp["label"], "profile": None,
+                "note": "no profile yet — it builds as they're heard in more conversations"}
+    return {"speaker_id": sp["id"], "name": sp["label"],
+            "relationship": sp["relationship"], "summary": prof["summary"],
+            "emotion_trend": prof["emotion_trend"], "topics": prof["topics"],
+            "recurring": prof["recurring"], "facts": prof["facts"],
+            "interactions": prof["interactions"], "last_seen": prof["last_seen"]}
 
 
 def rename_speaker(speaker_id: int, name: str) -> dict:
@@ -74,5 +104,7 @@ def get_transcript(transcript_id: int) -> dict:
 
 
 # registry (order = how they're registered with the MCP server)
-TOOLS = [list_speakers, get_speaker, rename_speaker, merge_speakers,
+# NOTE: speaker deletion is intentionally NOT exposed here — it's a destructive,
+# UI-only action (confirm dialog on the speaker page), kept out of the model's reach.
+TOOLS = [list_speakers, get_speaker, get_speaker_profile, rename_speaker, merge_speakers,
          list_unknown_speakers, list_tasks, dismiss_task, list_transcripts, get_transcript]

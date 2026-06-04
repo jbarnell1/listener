@@ -56,6 +56,7 @@ mcp_mgr = MCPManager()
 
 @contextlib.asynccontextmanager
 async def lifespan(_app):
+    db.init_db()          # ensure schema + run idempotent migrations
     mcp_mgr.start()       # bring the MCP server up with the dashboard
     yield
     mcp_mgr.stop()
@@ -129,7 +130,23 @@ def speaker(request: Request, sid: int):
     if not sp:
         raise HTTPException(404)
     return page("speaker.html", request, active="speakers", sp=sp,
-                tasks=db.speaker_intents(c, sid), segments=db.speaker_segments(c, sid))
+                profile=db.get_profile(c, sid), tasks=db.speaker_intents(c, sid),
+                segments=db.speaker_segments(c, sid))
+
+
+@app.post("/speakers/{sid}/profiling")
+def toggle_profiling(sid: int):
+    c = db.connect()
+    sp = db.get_speaker(c, sid)
+    if sp:
+        db.set_do_not_profile(c, sid, flag=not bool(sp["do_not_profile"]))
+    return RedirectResponse(f"/speakers/{sid}", status_code=303)
+
+
+@app.post("/speakers/{sid}/delete")
+def delete_speaker(sid: int):
+    db.delete_speaker(db.connect(), sid)
+    return RedirectResponse("/speakers", status_code=303)
 
 
 @app.post("/speakers/{sid}/name")

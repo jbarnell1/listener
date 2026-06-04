@@ -141,6 +141,14 @@ def main():
     conn.commit()
     print(f"\nstored {len(intents)} intent(s) for transcript #{tid} -> listener.db")
 
+    # continuously enrich speaker profiles from this same transcript (ADR-023).
+    try:
+        import profile
+        done = profile.update_for_transcript(conn, tid)
+        print(f"enriched {len(done)} speaker profile(s)")
+    except Exception as e:
+        print(f"(profile enrichment skipped: {e})")
+
 
 if __name__ == "__main__":
     main()

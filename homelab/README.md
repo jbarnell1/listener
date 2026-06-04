@@ -120,6 +120,20 @@ tool-calling agent loop, and **streams** tokens + tool-call events over SSE
 (`GET /assistant/stream?q=…`). The mobile UI has a ✨ FAB → collapsible chat that
 renders the stream. Model: **qwen3:8b** (qwen3:4b loops on multi-tool flows). All local.
 
+## Speaker profiles — continuously enriched, + privacy delete (ADR-023)
+`profile.py` runs a local-LLM pass over each new transcript and **merges** what it
+learns about every named speaker into an evolving dossier (summary, relationship,
+emotional trend, recurring topics/habits, durable facts) — it never starts from
+scratch, so it compounds. Hooked into `intents.py` (rides the same per-transcript
+LLM pass); honors the per-speaker opt-out (`speakers.do_not_profile`). Shown as a
+card on the speaker page; the assistant reads it via `get_speaker_profile` (by name
+or id). Backfill existing speakers: `python profile.py --backfill`.
+
+The speaker page also has a **privacy delete** (`db.delete_speaker`, smart cascade):
+removes their tasks, profile, voiceprint, and their lines in every transcript;
+transcripts left empty (and their audio) are removed, shared conversations keep the
+other speakers. UI-only with a confirm — deliberately **not** an assistant tool.
+
 **Remote (phone) access — Tailscale Serve (tailnet-only, no public exposure):**
 ```bash
 tailscale serve --bg 8000      # → https://<machine>.<tailnet>.ts.net

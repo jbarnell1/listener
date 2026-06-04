@@ -22,6 +22,44 @@
 </div>
 
 <div class="card">
+  <h2>Profile <span class="muted" style="font-weight:400;font-size:.78rem">· learned automatically as they're heard</span></h2>
+  {% if profile %}
+    {% if profile.summary %}<p style="margin:.1em 0 .2em">{{ profile.summary }}</p>{% endif %}
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin:.4em 0">
+      {% if sp.relationship %}<span class="chip">🔗 {{ sp.relationship }}</span>{% endif %}
+      {% if profile.emotion_trend %}<span class="chip">🙂 {{ profile.emotion_trend }}</span>{% endif %}
+    </div>
+    {% if profile.facts %}
+      <div class="muted" style="margin:.7em 0 .2em;font-weight:700">What I know</div>
+      <ul style="margin:.2em 0 0;padding-left:1.1em">
+        {% for f in profile.facts %}<li>{{ f }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+    {% if profile.recurring %}
+      <div class="muted" style="margin:.7em 0 .2em;font-weight:700">Patterns</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        {% for r in profile.recurring %}<span class="chip">🔁 {{ r }}</span>{% endfor %}</div>
+    {% endif %}
+    {% if profile.topics %}
+      <div class="muted" style="margin:.7em 0 .2em;font-weight:700">Topics</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        {% for t in profile.topics %}<span class="chip">{{ t }}</span>{% endfor %}</div>
+    {% endif %}
+    <div class="muted" style="margin-top:.8em;font-size:.76rem">
+      {{ profile.interactions }} conversation{{ '' if profile.interactions == 1 else 's' }}
+      · updated {{ profile.updated_at|localtime }}</div>
+  {% elif sp.do_not_profile %}
+    <div class="empty">Profiling is turned off for this person.</div>
+  {% else %}
+    <div class="empty">No profile yet — it builds automatically as {{ sp.label }} is heard in more conversations.</div>
+  {% endif %}
+  <form method="post" action="/speakers/{{ sp.id }}/profiling" style="margin-top:.7em">
+    {% if sp.do_not_profile %}<button class="btn ghost">Enable profiling</button>
+    {% else %}<button class="btn ghost">Disable profiling</button>{% endif %}
+  </form>
+</div>
+
+<div class="card">
   <h2>Tasks</h2>
   {% for i in tasks %}{% include "_task.html" %}
   {% else %}<div class="empty">No open tasks</div>{% endfor %}
@@ -38,5 +76,18 @@
       <audio controls preload="none" src="/segment/{{ s.id }}/audio.wav"></audio>
     </div>
   {% else %}<div class="empty">No segments</div>{% endfor %}
+</div>
+
+<div class="card" style="border-color:#5a2a32">
+  <h2 style="color:#ff8a8a">Danger zone</h2>
+  <p class="muted" style="margin:0 0 12px">Permanently delete <b>{{ sp.label }}</b> and
+  everything tied to them — tasks, profile, voiceprint, and their lines in every transcript.
+  Conversations left empty are removed; shared conversations keep the other speakers. This
+  cannot be undone.</p>
+  <form method="post" action="/speakers/{{ sp.id }}/delete"
+    onsubmit="return confirm('Delete {{ sp.label }} and ALL of their data permanently? This cannot be undone.')">
+    <button class="btn" style="background:linear-gradient(135deg,#ff6b6b,#d6336c);color:#fff">
+      🗑 Delete everything</button>
+  </form>
 </div>
 {% endblock %}

@@ -153,6 +153,22 @@ def toggle_profiling(sid: int):
     return RedirectResponse(f"/speakers/{sid}", status_code=303)
 
 
+@app.post("/speakers/{sid}/relationship")
+def set_relationship(sid: int, relationship: str = Form("")):
+    c = db.connect()
+    rel = relationship.strip()
+    if rel.lower() == "myself":
+        db.set_self(c, sid)               # exclusive — clears 'myself' from all others
+        db.set_relationship(c, sid, None)
+    else:
+        sp = db.get_speaker(c, sid)
+        if sp and sp["is_self"]:
+            c.execute("UPDATE speakers SET is_self=0 WHERE id=?", (sid,))
+            c.commit()
+        db.set_relationship(c, sid, rel or None)
+    return RedirectResponse(f"/speakers/{sid}", status_code=303)
+
+
 @app.post("/speakers/{sid}/delete")
 def delete_speaker(sid: int):
     db.delete_speaker(db.connect(), sid)
@@ -227,8 +243,8 @@ async def assistant_stream(q: str):
 
 
 @app.get("/settings", response_class=HTMLResponse)
-def settings(request: Request):
-    return page("settings.html", request, active="settings",
+def settings(request: Request, mail: str = ""):
+    return page("settings.html", request, active="settings", mail=mail,
                 mcp_running=mcp_mgr.running(), model=assistant.MODEL,
                 mail_configured=mailer.configured(),
                 mail_to=(os.environ.get("LISTENER_MAIL_TO")
@@ -247,8 +263,14 @@ def mcp_control(request: Request, action: str):
 
 @app.post("/settings/mail/test")
 def mail_test():
-    mailer.send("Listener test ✅", "If you're reading this, email delivery works. 🎧")
-    return RedirectResponse("/settings", status_code=303)
+    try:
+        ok = mailer.send("Listener test ✅",
+                         "If you're reading this, email delivery works. 🎧")
+        flag = "sent" if ok else "noconfig"
+    except Exception as e:  # noqa: BLE001 — surface SMTP errors to the user
+        print(f"mail test failed: {e}")
+        flag = "error"
+    return RedirectResponse(f"/settings?mail={flag}", status_code=303)
 
 
 @app.get("/segment/{seg_id}/audio.wav")

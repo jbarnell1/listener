@@ -40,11 +40,12 @@ Runs on the i5 + RTX 4070 Super. Detailed code lands in Phase 4.
 chunks(id, device, seq, ts_start, codec, bytes, path, acked, transcribed)
 transcripts(id, chunk_id, text, words_json, lang, created_at)
 segments(id, transcript_id, speaker_id, t_start, t_end, text)  -- speaker-attributed
-speakers(id, name, relationship, status, do_not_profile, created_at, updated_at)
-                                  -- status ∈ {enrolled, unknown}; name null until labeled
+speakers(id, name, relationship, status, do_not_profile, is_self, created_at, updated_at)
+                  -- status ∈ {enrolled, unknown}; name null until labeled; is_self = device owner
 embeddings(id, speaker_id, vec BLOB, source_chunk, created_at) -- ECAPA 192-d; centroid+samples
-profiles(speaker_id, summary, emotion_trend, topics_json, recurring_json,
-         facts_json, last_seen, interaction_count, updated_at) -- relational profile (ADR-023)
+profiles(speaker_id, summary, emotion_trend(=transient mood), traits_json, interests_json,
+         dislikes_json, dates_json, notable_json, last_seen, interaction_count, updated_at)
+                  -- personality/relational profile, ADR-023 (durable fields + transient mood)
 intents(id, segment_id, speaker_id, action, tier, due_at, status, source_quote)
 schedule_jobs(...)   -- APScheduler's own job store table
 ```

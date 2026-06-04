@@ -51,10 +51,11 @@ def get_speaker_profile(speaker: str) -> dict:
         return {"speaker_id": sp["id"], "name": sp["label"], "profile": None,
                 "note": "no profile yet — it builds as they're heard in more conversations"}
     return {"speaker_id": sp["id"], "name": sp["label"],
-            "relationship": sp["relationship"], "summary": prof["summary"],
-            "emotion_trend": prof["emotion_trend"], "topics": prof["topics"],
-            "recurring": prof["recurring"], "facts": prof["facts"],
-            "interactions": prof["interactions"], "last_seen": prof["last_seen"]}
+            "relationship": "self" if sp["is_self"] else sp["relationship"],
+            "summary": prof["summary"], "traits": prof["traits"],
+            "interests": prof["interests"], "dislikes": prof["dislikes"],
+            "important_dates": prof["dates"], "notable": prof["notable"],
+            "recent": prof["recent"], "interactions": prof["interactions"]}
 
 
 def rename_speaker(speaker_id: int, name: str) -> dict:

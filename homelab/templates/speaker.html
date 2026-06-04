@@ -5,6 +5,7 @@
   <div class="grow">
     <h1 class="page" style="margin:0">{{ sp.label }}</h1>
     <div class="muted" style="margin-top:4px">
+      {% if sp.is_self %}<span class="chip good">⭐ you</span>{% endif %}
       {% if sp.status == 'enrolled' %}<span class="chip good">known</span>
       {% else %}<span class="chip unk">unknown</span>{% endif %}
       · {{ segments|length }} recent segments
@@ -22,30 +23,51 @@
 </div>
 
 <div class="card">
-  <h2>Profile <span class="muted" style="font-weight:400;font-size:.78rem">· learned automatically as they're heard</span></h2>
+  <h2>Profile <span class="muted" style="font-weight:400;font-size:.78rem">· who they are, learned over time</span></h2>
+  {% set rels = ['Spouse/Partner','Mother','Father','Son','Daughter','Brother','Sister',
+                 'Friend','In-law','Grandparent','Grandchild','Coworker','Boss','Neighbor',
+                 'Acquaintance','Other'] %}
+  <form method="post" action="/speakers/{{ sp.id }}/relationship" class="field" style="margin:.1em 0 .6em">
+    <select name="relationship" onchange="this.form.submit()" aria-label="Relationship to you">
+      <option value="">— relationship to you —</option>
+      <option value="Myself" {{ 'selected' if sp.is_self }}>⭐ Myself</option>
+      {% for r in rels %}<option value="{{ r }}" {{ 'selected' if (not sp.is_self and sp.relationship == r) }}>{{ r }}</option>{% endfor %}
+      {% if sp.relationship and not sp.is_self and sp.relationship not in rels %}<option value="{{ sp.relationship }}" selected>{{ sp.relationship }}</option>{% endif %}
+    </select>
+    <noscript><button class="btn">Set</button></noscript>
+  </form>
   {% if profile %}
-    {% if profile.summary %}<p style="margin:.1em 0 .2em">{{ profile.summary }}</p>{% endif %}
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin:.4em 0">
-      {% if sp.relationship %}<span class="chip">🔗 {{ sp.relationship }}</span>{% endif %}
-      {% if profile.emotion_trend %}<span class="chip">🙂 {{ profile.emotion_trend }}</span>{% endif %}
-    </div>
-    {% if profile.facts %}
-      <div class="muted" style="margin:.7em 0 .2em;font-weight:700">What I know</div>
+    {% if profile.summary %}<p style="margin:.1em 0 .3em">{{ profile.summary }}</p>{% endif %}
+
+    {% if profile.traits %}
+      <div class="muted" style="margin:.7em 0 .2em;font-weight:700">Personality</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        {% for t in profile.traits %}<span class="chip">{{ t }}</span>{% endfor %}</div>
+    {% endif %}
+    {% if profile.interests %}
+      <div class="muted" style="margin:.7em 0 .2em;font-weight:700">Loves &amp; interests</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        {% for t in profile.interests %}<span class="chip">💛 {{ t }}</span>{% endfor %}</div>
+    {% endif %}
+    {% if profile.dislikes %}
+      <div class="muted" style="margin:.7em 0 .2em;font-weight:700">Dislikes</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        {% for t in profile.dislikes %}<span class="chip">🚫 {{ t }}</span>{% endfor %}</div>
+    {% endif %}
+    {% if profile.dates %}
+      <div class="muted" style="margin:.7em 0 .2em;font-weight:700">Important dates</div>
       <ul style="margin:.2em 0 0;padding-left:1.1em">
-        {% for f in profile.facts %}<li>{{ f }}</li>{% endfor %}
-      </ul>
+        {% for d in profile.dates %}<li><b>{{ d.label }}</b> — {{ d.date }}</li>{% endfor %}</ul>
     {% endif %}
-    {% if profile.recurring %}
-      <div class="muted" style="margin:.7em 0 .2em;font-weight:700">Patterns</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">
-        {% for r in profile.recurring %}<span class="chip">🔁 {{ r }}</span>{% endfor %}</div>
+    {% if profile.notable %}
+      <div class="muted" style="margin:.7em 0 .2em;font-weight:700">Good to know</div>
+      <ul style="margin:.2em 0 0;padding-left:1.1em">
+        {% for f in profile.notable %}<li>{{ f }}</li>{% endfor %}</ul>
     {% endif %}
-    {% if profile.topics %}
-      <div class="muted" style="margin:.7em 0 .2em;font-weight:700">Topics</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">
-        {% for t in profile.topics %}<span class="chip">{{ t }}</span>{% endfor %}</div>
+    {% if profile.recent %}
+      <p class="muted" style="margin:.8em 0 0;font-style:italic">Lately: {{ profile.recent }}</p>
     {% endif %}
-    <div class="muted" style="margin-top:.8em;font-size:.76rem">
+    <div class="muted" style="margin-top:.7em;font-size:.76rem">
       {{ profile.interactions }} conversation{{ '' if profile.interactions == 1 else 's' }}
       · updated {{ profile.updated_at|localtime }}</div>
   {% elif sp.do_not_profile %}
@@ -53,7 +75,7 @@
   {% else %}
     <div class="empty">No profile yet — it builds automatically as {{ sp.label }} is heard in more conversations.</div>
   {% endif %}
-  <form method="post" action="/speakers/{{ sp.id }}/profiling" style="margin-top:.7em">
+  <form method="post" action="/speakers/{{ sp.id }}/profiling" style="margin-top:.8em">
     {% if sp.do_not_profile %}<button class="btn ghost">Enable profiling</button>
     {% else %}<button class="btn ghost">Disable profiling</button>{% endif %}
   </form>

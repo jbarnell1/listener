@@ -20,14 +20,19 @@ stdlib (only new dep: apscheduler). Closes Q-S2.
 ### ADR-023 — Continuously-enriched speaker profiles + privacy delete
 **2026-06-04.** Wires up the long-planned per-person profiles (ADR-014): after each
 transcript a **local-LLM pass MERGES** new info into each named speaker's dossier
-(summary, relationship, emotion trend, recurring topics/habits, durable facts) —
-never from scratch, so it compounds. Rides `intents.py`'s existing per-transcript
-LLM pass (`profile.py`); honors the per-speaker **`do_not_profile`** opt-out. A
-**privacy delete** (`delete_speaker`, smart cascade) removes a person's tasks,
-profile, voiceprint, and their lines in every transcript; transcripts left empty
-(and their audio) are removed while **shared conversations keep other speakers** —
-a per-person "right to be forgotten." Delete is **UI-only** (confirm dialog),
-deliberately NOT an assistant/MCP tool; the assistant can only *read* profiles
+(`profile.py`). The profile is a true *personality/relational* picture — summary,
+**traits**, interests, dislikes, **important dates**, notable facts (family/pets/
+job) + a transient "lately" mood — explicitly **NOT** a list of their tasks (those
+live in `intents`). The merge is **non-destructive**: durable fields evolve slowly
+and additively while only the transient mood is overwritten, so one bad day never
+rewrites who someone is. Relationship is a user-set **dropdown** including
+**"Myself"** (the `speakers.is_self` device-owner flag, which frames everyone else's
+relationship); the LLM only fills relationship when unset. Honors the per-speaker
+**`do_not_profile`** opt-out. A **privacy delete** (`delete_speaker`, smart cascade)
+removes a person's tasks, profile, voiceprint, and their lines in every transcript;
+transcripts left empty (and their audio) are removed while **shared conversations
+keep other speakers** — a per-person "right to be forgotten." Delete is **UI-only**
+(confirm dialog), NOT an assistant tool; the assistant can only *read* profiles
 (`get_speaker_profile`, by name or id). Closes Q-S5.
 
 ### ADR-022 — Word-level speaker attribution via WhisperX

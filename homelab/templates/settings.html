@@ -26,6 +26,16 @@
 
 <div class="card">
   <h2>Email · nightly brief</h2>
+  {% if mail == 'sent' %}
+    <div class="empty" style="color:var(--good);padding:8px 0">✓ Test email sent — check
+    <b>All Mail / Spam</b> (mail to yourself can skip the Inbox).</div>
+  {% elif mail == 'error' %}
+    <div class="empty" style="color:var(--warn);padding:8px 0">⚠ Send failed — check the app log
+    (<code>listener logs</code>).</div>
+  {% elif mail == 'noconfig' %}
+    <div class="empty" style="color:var(--warn);padding:8px 0">No credentials loaded — add them
+    to <code>~/.listener.env</code> and <code>listener restart</code>.</div>
+  {% endif %}
   <div class="row" style="border:none;padding-top:0">
     <div class="av" style="--hue:150">✉️</div>
     <div class="grow">

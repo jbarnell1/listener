@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS speakers (
   relationship   TEXT,
   status         TEXT NOT NULL DEFAULT 'unknown',   -- enrolled | unknown
   do_not_profile INTEGER NOT NULL DEFAULT 0,        -- Q-S5 opt-out
+  is_self        INTEGER NOT NULL DEFAULT 0,        -- the device owner ("myself")
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -54,8 +55,14 @@ CREATE TABLE IF NOT EXISTS segments (
 );
 CREATE TABLE IF NOT EXISTS profiles (
   speaker_id        INTEGER PRIMARY KEY REFERENCES speakers(id) ON DELETE CASCADE,
-  summary           TEXT, emotion_trend TEXT, topics_json TEXT, recurring_json TEXT,
-  facts_json        TEXT,                            -- durable learned facts (LLM-merged)
+  summary           TEXT,                            -- durable: who they are
+  emotion_trend     TEXT,                            -- TRANSIENT: recent mood/context (overwritten)
+  traits_json       TEXT,                            -- durable: personality traits
+  interests_json    TEXT,                            -- durable: hobbies/passions (gift-relevant)
+  dislikes_json     TEXT,                            -- durable: dislikes/sensitivities
+  dates_json        TEXT,                            -- durable: important dates [{label,date}]
+  notable_json      TEXT,                            -- durable: facts (family/pet/job/place) — NOT tasks
+  topics_json       TEXT, recurring_json TEXT, facts_json TEXT,   -- (legacy, unused)
   last_seen         TEXT,
   interaction_count INTEGER NOT NULL DEFAULT 0,
   updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
@@ -85,9 +92,15 @@ def connect(path: str = DB_PATH) -> sqlite3.Connection:
 
 def _migrate(conn):
     """Idempotent column adds for DBs created before a field existed."""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(profiles)")}
-    if "facts_json" not in cols:
-        conn.execute("ALTER TABLE profiles ADD COLUMN facts_json TEXT")
+    def cols(table):
+        return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+    if "is_self" not in cols("speakers"):
+        conn.execute("ALTER TABLE speakers ADD COLUMN is_self INTEGER NOT NULL DEFAULT 0")
+    have = cols("profiles")
+    for col in ("facts_json", "traits_json", "interests_json", "dislikes_json",
+                "dates_json", "notable_json", "topics_json", "recurring_json"):
+        if col not in have:
+            conn.execute(f"ALTER TABLE profiles ADD COLUMN {col} TEXT")
     conn.commit()
 
 
@@ -218,28 +231,35 @@ def get_profile(conn, sid):
     r = conn.execute("SELECT * FROM profiles WHERE speaker_id=?", (sid,)).fetchone()
     if not r:
         return None
-    return {"summary": r["summary"], "emotion_trend": r["emotion_trend"],
-            "topics": json.loads(r["topics_json"] or "[]"),
-            "recurring": json.loads(r["recurring_json"] or "[]"),
-            "facts": json.loads(r["facts_json"] or "[]"),
+
+    def arr(col):
+        return json.loads((r[col] if col in r.keys() else None) or "[]")
+    return {"summary": r["summary"], "recent": r["emotion_trend"],
+            "traits": arr("traits_json"), "interests": arr("interests_json"),
+            "dislikes": arr("dislikes_json"), "dates": arr("dates_json"),
+            "notable": arr("notable_json"),
             "last_seen": r["last_seen"], "interactions": r["interaction_count"],
             "updated_at": r["updated_at"]}
 
 
-def upsert_profile(conn, sid, *, summary, emotion_trend, topics, recurring, facts, last_seen=None):
-    """Insert or merge-update a speaker's profile; bumps interaction_count on update."""
+def upsert_profile(conn, sid, *, summary, recent, traits, interests, dislikes,
+                   dates, notable, last_seen=None):
+    """Insert or merge-update a speaker's profile; bumps interaction_count on update.
+    Durable fields are passed pre-merged by profile.py; `recent` (mood) is transient."""
     conn.execute(
-        "INSERT INTO profiles(speaker_id, summary, emotion_trend, topics_json, "
-        "  recurring_json, facts_json, last_seen, interaction_count, updated_at) "
-        "VALUES(?,?,?,?,?,?,?,1,datetime('now')) "
+        "INSERT INTO profiles(speaker_id, summary, emotion_trend, traits_json, "
+        "  interests_json, dislikes_json, dates_json, notable_json, last_seen, "
+        "  interaction_count, updated_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,1,datetime('now')) "
         "ON CONFLICT(speaker_id) DO UPDATE SET "
         "  summary=excluded.summary, emotion_trend=excluded.emotion_trend, "
-        "  topics_json=excluded.topics_json, recurring_json=excluded.recurring_json, "
-        "  facts_json=excluded.facts_json, "
+        "  traits_json=excluded.traits_json, interests_json=excluded.interests_json, "
+        "  dislikes_json=excluded.dislikes_json, dates_json=excluded.dates_json, "
+        "  notable_json=excluded.notable_json, "
         "  last_seen=COALESCE(excluded.last_seen, profiles.last_seen), "
         "  interaction_count=profiles.interaction_count+1, updated_at=datetime('now')",
-        (sid, summary, emotion_trend, json.dumps(topics), json.dumps(recurring),
-         json.dumps(facts), last_seen))
+        (sid, summary, recent, json.dumps(traits), json.dumps(interests),
+         json.dumps(dislikes), json.dumps(dates), json.dumps(notable), last_seen))
     conn.commit()
 
 
@@ -247,6 +267,23 @@ def set_do_not_profile(conn, sid, flag):
     conn.execute("UPDATE speakers SET do_not_profile=?, updated_at=datetime('now') WHERE id=?",
                  (1 if flag else 0, sid))
     conn.commit()
+
+
+def set_relationship(conn, sid, rel):
+    conn.execute("UPDATE speakers SET relationship=?, updated_at=datetime('now') WHERE id=?",
+                 (rel, sid))
+    conn.commit()
+
+
+def set_self(conn, sid):
+    """Mark one speaker as the device owner ('myself'); clears it from all others."""
+    conn.execute("UPDATE speakers SET is_self=CASE WHEN id=? THEN 1 ELSE 0 END", (sid,))
+    conn.commit()
+
+
+def get_self(conn):
+    return conn.execute("SELECT *, COALESCE(name, 'Unknown_' || id) AS label "
+                        "FROM speakers WHERE is_self=1 LIMIT 1").fetchone()
 
 
 def speaker_transcript_ids(conn, sid):

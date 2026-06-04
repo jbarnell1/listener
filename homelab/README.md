@@ -115,8 +115,11 @@ item was routed (Calendar/Task/digest); dismissing one also deletes its Google i
 
 ## Page assistant — MCP + Ollama, streamed (ADR-020)
 A real **MCP server** (`mcp_server.py`, FastMCP streamable-HTTP on :8765) exposes
-the dashboard tools (`assistant_tools.py`: list/rename/merge speakers, list/dismiss
-tasks, read transcripts). The app launches + restarts it (Settings page). The
+the dashboard tools (`assistant_tools.py`) — full site parity: overview, recent
+activity, speakers (list/get/profile/rename/**set relationship & "myself"**/**profiling
+opt-out**/merge), unknowns, tasks (list with routing + dismiss → also deletes the
+Google item), transcripts, and Google connection status. *Speaker delete stays
+UI-only.* The app launches + restarts it (Settings page). The
 assistant (`assistant.py`) connects to it **as an MCP client**, runs an Ollama
 tool-calling agent loop, and **streams** tokens + tool-call events over SSE
 (`GET /assistant/stream?q=…`). The mobile UI has a ✨ FAB → collapsible chat that

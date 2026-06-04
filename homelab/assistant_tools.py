@@ -6,6 +6,7 @@ JSON-serializable results. Shared by mcp_server.py (exposes them over MCP) and
 the in-process fallback. Pure DB ops — no raw SQL exposed to the model.
 """
 import db
+import google_sync
 
 
 def _resolve_speaker(c, ref):
@@ -16,6 +17,17 @@ def _resolve_speaker(c, ref):
     return c.execute(
         "SELECT *, COALESCE(name, 'Unknown_' || id) AS label FROM speakers "
         "WHERE lower(name) = lower(?) ORDER BY id LIMIT 1", (s,)).fetchone()
+
+
+def _routed_to(r):
+    """Where a synced intent landed (matches the dashboard chips)."""
+    if r["calendar_event_id"]:
+        return "calendar"
+    if r["gtask_id"]:
+        return "task"
+    if (r["kind"] or "") == "followup":
+        return "digest"
+    return "pending"
 
 
 def list_speakers() -> list:
@@ -78,17 +90,22 @@ def list_unknown_speakers() -> list:
 
 
 def list_tasks(tier: str = "") -> list:
-    """List open (not dismissed) tasks. tier is optional: 'SOON' or 'LATER'."""
+    """List open (not dismissed) tasks/events/follow-ups. tier optional: 'SOON' or
+    'LATER'. `kind` is event|task|followup; `routed_to` shows where each landed:
+    calendar | task | digest | pending."""
     rows = db.list_intents(db.connect(), tier or None)
-    return [{"id": r["id"], "action": r["action"], "tier": r["tier"],
-             "due_at": r["due_at"], "who": r["who"], "speaker_id": r["speaker_id"]}
-            for r in rows]
+    return [{"id": r["id"], "action": r["action"], "kind": r["kind"], "tier": r["tier"],
+             "due_at": r["due_at"], "who": r["who"], "routed_to": _routed_to(r),
+             "speaker_id": r["speaker_id"]} for r in rows]
 
 
 def dismiss_task(task_id: int) -> dict:
-    """Dismiss (mark done/cancel) a task by id."""
-    db.dismiss_intent(db.connect(), task_id)
-    return {"ok": True, "message": f"task {task_id} dismissed"}
+    """Dismiss (mark done/cancel) a task by id — also deletes its Google Calendar
+    event / Task if one was created (mirrors the dashboard's dismiss)."""
+    c = db.connect()
+    google_sync.remove_intent(c, task_id)
+    db.dismiss_intent(c, task_id)
+    return {"ok": True, "message": f"task {task_id} dismissed (removed from Google if synced)"}
 
 
 def list_transcripts() -> list:
@@ -104,8 +121,81 @@ def get_transcript(transcript_id: int) -> dict:
             "lines": [{"who": s["who"], "text": s["text"]} for s in segs]}
 
 
+def set_relationship(speaker: str, relationship: str) -> dict:
+    """Set a speaker's relationship to the device owner (e.g. 'wife', 'coworker',
+    'friend', 'mother'), or 'myself' to mark them AS the owner (exclusive).
+    `speaker` may be a name or id."""
+    c = db.connect()
+    sp = _resolve_speaker(c, speaker)
+    if not sp:
+        return {"error": f"no speaker matching '{speaker}'"}
+    rel = relationship.strip()
+    if rel.lower() in ("myself", "me", "self"):
+        db.set_self(c, sp["id"])
+        db.set_relationship(c, sp["id"], None)
+        return {"ok": True, "message": f"{sp['label']} is now marked as you (myself)"}
+    if sp["is_self"]:
+        c.execute("UPDATE speakers SET is_self=0 WHERE id=?", (sp["id"],))
+        c.commit()
+    db.set_relationship(c, sp["id"], rel or None)
+    return {"ok": True, "message": f"{sp['label']}'s relationship set to '{rel}'"}
+
+
+def set_profiling(speaker: str, enabled: bool) -> dict:
+    """Turn automatic profile-building on (True) or off (False) for a speaker — the
+    privacy opt-out. `speaker` may be a name or id."""
+    c = db.connect()
+    sp = _resolve_speaker(c, speaker)
+    if not sp:
+        return {"error": f"no speaker matching '{speaker}'"}
+    db.set_do_not_profile(c, sp["id"], flag=not enabled)
+    return {"ok": True,
+            "message": f"profiling {'enabled' if enabled else 'disabled'} for {sp['label']}"}
+
+
+def recent_activity() -> dict:
+    """What the system has found recently: latest action items (with where each was
+    routed) + recent conversations. Use for 'what's new / what did you find lately'."""
+    c = db.connect()
+    items = db.list_intents(c)[:15]
+    return {"recent_items": [{"action": r["action"], "who": r["who"], "kind": r["kind"],
+                              "due_at": r["due_at"], "routed_to": _routed_to(r)}
+                             for r in items],
+            "recent_conversations": [{"id": r["id"], "segments": r["n_segments"],
+                                      "created_at": r["created_at"]}
+                                     for r in db.recent_transcripts(c, 5)]}
+
+
+def google_status() -> dict:
+    """Whether Google Calendar/Tasks is connected, plus how many events/tasks have
+    been created from conversations."""
+    c = db.connect()
+    row = c.execute("SELECT SUM(calendar_event_id IS NOT NULL) AS events, "
+                    "SUM(gtask_id IS NOT NULL) AS tasks FROM intents").fetchone()
+    return {"connected": google_sync.configured(),
+            "calendar_events_created": row["events"] or 0,
+            "tasks_created": row["tasks"] or 0}
+
+
+def get_overview() -> dict:
+    """High-level snapshot for 'give me a summary': counts of people, unknown voices,
+    open tasks, transcripts, and whether Google is connected."""
+    c = db.connect()
+    cnt = db.counts(c)
+    return {"speakers": cnt["speakers"], "unknown_speakers": len(db.unknown_speakers(c)),
+            "open_tasks": len(db.list_intents(c)), "transcripts": cnt["transcripts"],
+            "google_connected": google_sync.configured()}
+
+
 # registry (order = how they're registered with the MCP server)
-# NOTE: speaker deletion is intentionally NOT exposed here — it's a destructive,
-# UI-only action (confirm dialog on the speaker page), kept out of the model's reach.
-TOOLS = [list_speakers, get_speaker, get_speaker_profile, rename_speaker, merge_speakers,
-         list_unknown_speakers, list_tasks, dismiss_task, list_transcripts, get_transcript]
+# NOTE: speaker deletion is intentionally NOT exposed — it's a destructive, UI-only
+# action (confirm dialog on the speaker page), kept out of the model's reach.
+TOOLS = [
+    get_overview, recent_activity,
+    list_speakers, get_speaker, get_speaker_profile,
+    rename_speaker, set_relationship, set_profiling, merge_speakers,
+    list_unknown_speakers,
+    list_tasks, dismiss_task,
+    list_transcripts, get_transcript,
+    google_status,
+]

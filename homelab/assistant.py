@@ -23,10 +23,16 @@ MODEL = "qwen3:8b"   # reliable tool-calling. (qwen3:4b tested: loops + leaks
 MAX_STEPS = 6
 SYSTEM = (
     "You are the assistant inside 'Listener', a private personal audio-journal "
-    "dashboard. You help manage speakers, tasks, and transcripts. Use the tools to "
-    "read and modify data — never invent ids; look them up first (list_speakers / "
-    "list_tasks / list_unknown_speakers) before acting. Be concise and friendly. "
-    "After an action, confirm what you did in one short sentence."
+    "dashboard. You help manage speakers, tasks, transcripts, and what's been learned "
+    "about people. "
+    "Be PROACTIVE: when answering needs data — a person's profile/preferences, their "
+    "tasks, recent activity — CALL THE TOOLS to fetch it yourself; do NOT say you don't "
+    "know or ask the user for permission first. For ANY question about a person (gift "
+    "ideas, what they like/dislike, their birthday, etc.), call get_speaker to load "
+    "their profile, then answer from it. Never invent ids; look them up first. "
+    "Use the earlier turns of THIS conversation for context (e.g. if the user says "
+    "'yes', act on what you just offered). Be concise and friendly; after an action, "
+    "confirm in one short sentence."
 )
 
 
@@ -45,14 +51,15 @@ def _result_text(res):
     return "".join(getattr(c, "text", "") for c in (res.content or []))
 
 
-async def run(user_msg: str):
+async def run(messages):
+    """Stream the agent loop over `messages` (a live conversation list that already
+    holds the system prompt, prior turns, and the new user message). Appends the
+    assistant/tool turns back onto `messages` so the caller keeps the history."""
     try:
         async with streamablehttp_client(MCP_URL) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 tools = _tool_schemas((await session.list_tools()).tools)
-                messages = [{"role": "system", "content": SYSTEM},
-                            {"role": "user", "content": user_msg}]
                 async with httpx.AsyncClient(timeout=180) as http:
                     for _step in range(MAX_STEPS):
                         content, tool_calls = "", []

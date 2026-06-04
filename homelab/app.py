@@ -300,11 +300,25 @@ def activity(request: Request):
     return page("activity.html", request, active="activity", new_count=0, since=since, **data)
 
 
+ASSIST_SESSIONS = {}   # sid -> live conversation messages (ephemeral, in-memory)
+
+
 @app.get("/assistant/stream")
-async def assistant_stream(q: str):
-    """SSE stream of the page assistant (tokens + tool-call events)."""
+async def assistant_stream(q: str, sid: str = ""):
+    """SSE stream of the page assistant (tokens + tool-call events). `sid` keys an
+    in-memory conversation so multi-turn context works; cleared on restart."""
+    messages = ASSIST_SESSIONS.get(sid)
+    if messages is None:
+        messages = [{"role": "system", "content": assistant.SYSTEM}]
+        if sid:
+            if len(ASSIST_SESSIONS) > 50:          # bound memory across chats
+                ASSIST_SESSIONS.clear()
+            ASSIST_SESSIONS[sid] = messages
+    messages.append({"role": "user", "content": q})
+    if len(messages) > 25:                          # keep system + recent turns
+        messages[:] = [messages[0]] + messages[-24:]
     return StreamingResponse(
-        assistant.run(q), media_type="text/event-stream",
+        assistant.run(messages), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 

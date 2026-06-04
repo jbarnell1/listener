@@ -166,6 +166,7 @@ if(window.visualViewport){
   visualViewport.addEventListener('scroll', syncSheet);
 }
 const LS = {
+  sid: Math.random().toString(36).slice(2) + Date.now().toString(36),  // conversation id
   openChat(){ sheet.classList.add('open'); scrim.classList.add('open');
     setTimeout(()=>cinput.focus(), 120); syncSheet(); },
   closeChat(){ cinput.blur(); sheet.classList.remove('open'); scrim.classList.remove('open');
@@ -177,7 +178,7 @@ const LS = {
     cinput.value=''; this.busy=true;
     this.add('user', q);
     let tools=null, bot=null;
-    const es = new EventSource('/assistant/stream?q='+encodeURIComponent(q));
+    const es = new EventSource('/assistant/stream?q='+encodeURIComponent(q)+'&sid='+this.sid);
     es.onmessage = (e)=>{ const d=JSON.parse(e.data);
       if(d.type==='token'){ if(!bot) bot=this.add('bot',''); bot.textContent+=d.text; }
       else if(d.type==='tool'){ if(!tools){tools=document.createElement('div');tools.className='tools';cmsgs.appendChild(tools);}

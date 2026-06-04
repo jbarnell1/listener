@@ -21,6 +21,7 @@ import ssl
 import sys
 from datetime import datetime
 from email.message import EmailMessage
+from email.utils import formataddr
 from zoneinfo import ZoneInfo
 
 import db
@@ -48,7 +49,8 @@ def send(subject: str, text: str, html: str | None = None) -> bool:
         print("mailer: no credentials set (LISTENER_SMTP_USER/PASS) — skipping send")
         return False
     msg = EmailMessage()
-    msg["From"], msg["To"], msg["Subject"] = user, to, subject
+    msg["From"] = formataddr(("Listener", user))   # display name; address is still the Gmail acct
+    msg["To"], msg["Subject"] = to, subject
     msg.set_content(text)
     if html:
         msg.add_alternative(html, subtype="html")

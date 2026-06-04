@@ -37,16 +37,27 @@ def list_speakers() -> list:
             for r in db.list_speakers(db.connect())]
 
 
-def get_speaker(speaker_id: int) -> dict:
-    """Get one speaker's profile and their open tasks, by id."""
+def get_speaker(speaker: str) -> dict:
+    """Everything about a person: identity, relationship, their learned PROFILE
+    (personality, interests, dislikes, important dates, notable facts, recent mood),
+    and their open tasks. `speaker` may be a name or id. Use for any 'tell me about
+    <person>' / 'what do you know about <person>' question."""
     c = db.connect()
-    sp = db.get_speaker(c, speaker_id)
+    sp = _resolve_speaker(c, speaker)
     if not sp:
-        return {"error": f"no speaker with id {speaker_id}"}
+        return {"error": f"no speaker matching '{speaker}'"}
+    prof = db.get_profile(c, sp["id"])
     return {"id": sp["id"], "name": sp["name"], "label": sp["label"],
-            "status": sp["status"], "relationship": sp["relationship"],
-            "tasks": [{"id": t["id"], "action": t["action"], "tier": t["tier"],
-                       "due_at": t["due_at"]} for t in db.speaker_intents(c, speaker_id)]}
+            "status": sp["status"],
+            "relationship": "self" if sp["is_self"] else sp["relationship"],
+            "profile": ({"summary": prof["summary"], "traits": prof["traits"],
+                         "interests": prof["interests"], "dislikes": prof["dislikes"],
+                         "important_dates": prof["dates"], "notable": prof["notable"],
+                         "recent": prof["recent"], "interactions": prof["interactions"]}
+                        if prof else None),
+            "tasks": [{"id": t["id"], "action": t["action"], "kind": t["kind"],
+                       "tier": t["tier"], "due_at": t["due_at"]}
+                      for t in db.speaker_intents(c, sp["id"])]}
 
 
 def get_speaker_profile(speaker: str) -> dict:

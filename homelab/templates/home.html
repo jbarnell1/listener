@@ -1,41 +1,74 @@
 {% extends "base.html" %}
 {% block body %}
-<h1 class="page">Dashboard</h1>
-<p class="sub">Captured, transcribed, and attributed — all on your own machine.</p>
-
-<div class="stats">
-  <div class="stat"><div class="n">{{ counts.speakers }}</div><div class="l">Speakers</div></div>
-  <div class="stat"><div class="n">{{ counts.transcripts }}</div><div class="l">Transcripts</div></div>
-  <div class="stat"><div class="n">{{ counts.segments }}</div><div class="l">Segments</div></div>
-  <div class="stat"><div class="n">{{ counts.intents }}</div><div class="l">Tasks</div></div>
+<div class="statbar">
+  <a href="/speakers"><b>{{ counts.speakers }}</b><span>people</span></a>
+  <a href="/tasks"><b>{{ soon|length + later|length }}</b><span>open tasks</span></a>
+  <a href="/unknown"><b>{{ unknowns|length }}</b><span>to name</span></a>
+  <a href="/activity"><b>{{ new_count }}</b><span>new</span></a>
 </div>
 
+{% if unknowns %}
+<div class="sec">🔎 Name these voices</div>
+{% for u in unknowns[:3] %}
+  <div class="card" id="unk-{{ u.id }}" style="--hue:{{ u.id|hue }}">
+    <div class="row" style="border:none;padding:0 0 4px">
+      <div class="av">?</div>
+      <div class="grow"><div class="name">{{ u.label }}</div>
+        <div class="muted">{{ u.n_segments }} segments · who is this?</div></div>
+    </div>
+    {% for s in samples[u.id] %}
+      <div class="row" style="border:none">
+        <div class="grow">{{ s.text }}</div>
+        <audio controls preload="none" src="/segment/{{ s.id }}/audio.wav"></audio>
+      </div>
+    {% endfor %}
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+      {% if enrolled %}
+      <form class="field" hx-post="/speakers/{{ u.id }}/merge"
+            hx-target="#unk-{{ u.id }}" hx-swap="outerHTML">
+        <select name="target">
+          {% for e in enrolled %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}
+        </select>
+        <button class="btn ghost">Merge into ↑</button>
+      </form>{% endif %}
+      <form class="field" hx-post="/speakers/{{ u.id }}/name"
+            hx-target="#unk-{{ u.id }}" hx-swap="outerHTML">
+        <input name="name" placeholder="Name as a new person">
+        <button class="btn">Save</button>
+      </form>
+    </div>
+  </div>
+{% endfor %}
+{% if unknowns|length > 3 %}
+  <a class="muted" href="/unknown">+ {{ unknowns|length - 3 }} more unknown voices →</a>{% endif %}
+{% endif %}
+
 <div class="card">
-  <h2>Recent transcripts</h2>
+  <h2>Up next{% if soon %} · {{ soon|length }}{% endif %}</h2>
+  {% for i in soon[:6] %}{% include "_task.html" %}
+  {% else %}<div class="empty">Nothing urgent — you're on top of it ✨</div>{% endfor %}
+  {% if soon|length > 6 %}<a class="muted" href="/tasks">+ {{ soon|length - 6 }} more →</a>{% endif %}
+</div>
+
+{% if later %}
+<div class="card">
+  <h2>Coming up later</h2>
+  {% for i in later[:4] %}{% include "_task.html" %}{% endfor %}
+  {% if later|length > 4 %}<a class="muted" href="/tasks">see all {{ later|length }} later items →</a>{% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Recently captured</h2>
   {% for t in transcripts %}
     <a href="/transcripts/{{ t.id }}" class="row" style="color:inherit;--hue:{{ t.id|hue }}">
-      <div class="av">#{{ t.id }}</div>
+      <div class="av">🎙️</div>
       <div class="grow">
-        <div class="name">{{ t.audio_path }}</div>
-        <div class="muted">{{ t.n_segments }} segments · {{ t.created_at }}</div>
+        <div class="name">Conversation #{{ t.id }}</div>
+        <div class="muted">{{ t.n_segments }} segments · {{ t.created_at|localtime }}</div>
       </div>
       <span class="chevron">›</span>
     </a>
-  {% else %}<div class="empty">No transcripts yet</div>{% endfor %}
-</div>
-
-<div class="card">
-  <h2>Speakers</h2>
-  {% for s in speakers %}
-    <a href="/speakers/{{ s.id }}" class="row" style="color:inherit;--hue:{{ s.id|hue }}">
-      <div class="av">{{ s.label|initials }}</div>
-      <div class="grow">
-        <div class="name">{{ s.label }}</div>
-        <div class="muted">{{ s.n_segments }} segments</div>
-      </div>
-      {% if s.status == 'enrolled' %}<span class="chip good">known</span>
-      {% else %}<span class="chip unk">unknown</span>{% endif %}
-    </a>
-  {% else %}<div class="empty">No speakers yet</div>{% endfor %}
+  {% else %}<div class="empty">No conversations yet — upload audio to /ingest</div>{% endfor %}
 </div>
 {% endblock %}

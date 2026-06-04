@@ -178,8 +178,12 @@ def _hx(request):
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     c = db.connect()
+    unknowns = db.unknown_speakers(c)
+    samples = {r["id"]: db.speaker_segments(c, r["id"], limit=1) for r in unknowns}
     return page("home.html", request, active="home", counts=db.counts(c),
-                transcripts=db.recent_transcripts(c), speakers=db.list_speakers(c))
+                soon=db.list_intents(c, "SOON"), later=db.list_intents(c, "LATER"),
+                unknowns=unknowns, samples=samples, enrolled=db.enrolled_speakers(c),
+                transcripts=db.recent_transcripts(c, 6))
 
 
 @app.get("/speakers", response_class=HTMLResponse)

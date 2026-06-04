@@ -6,3 +6,4 @@ uvicorn[standard]
 jinja2
 python-multipart
 httpx
+dateparser   # H4: resolve relative due times → UTC (ADR-017)

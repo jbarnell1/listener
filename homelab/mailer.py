@@ -74,21 +74,24 @@ def _local(iso: str) -> str:
 
 
 def compose_brief(conn=None):
+    """Digest only (ADR-026): timed reminders now live on Google Calendar/Tasks.
+    Dated items appear as a heads-up; undated follow-ups are the email's real job."""
     conn = conn or db.connect()
-    soon = db.list_intents(conn, "SOON")
-    later = db.list_intents(conn, "LATER")
+    rows = db.list_intents(conn)
+    dated = [r for r in rows if r["due_at"]]
+    undated = [r for r in rows if not r["due_at"]]
     day = datetime.now(TZ).strftime("%A, %B %-d")
 
     lines = [f"Listener — your brief for {day}", ""]
-    if soon:
-        lines.append("Soon / time-sensitive:")
-        lines += [f"  - {t['action']}  ({t['who']} - {_local(t['due_at'])})" for t in soon]
+    if dated:
+        lines.append("Coming up (also on your Calendar / Tasks):")
+        lines += [f"  - {t['action']}  ({t['who']} · {_local(t['due_at'])})" for t in dated]
         lines.append("")
-    if later:
-        lines.append("Coming up:")
-        lines += [f"  - {t['action']}  ({t['who']})" for t in later]
+    if undated:
+        lines.append("Follow-ups (no deadline):")
+        lines += [f"  - {t['action']}  ({t['who']})" for t in undated]
         lines.append("")
-    if not soon and not later:
+    if not dated and not undated:
         lines.append("Nothing on the list right now. Enjoy the quiet.")
     lines.append("\n— Listener (local, private)")
 
@@ -97,15 +100,17 @@ def compose_brief(conn=None):
         return (f"<li style='margin:6px 0'>{t['action']} "
                 f"<span style='color:#8a96a8'>· {t['who']}{d}</span></li>")
     html = ["<div style='font-family:system-ui,Segoe UI,sans-serif;max-width:560px'>",
-            f"<h2 style='margin:0 0 2px'>Your brief</h2>",
+            "<h2 style='margin:0 0 2px'>Your brief</h2>",
             f"<div style='color:#8a96a8;margin-bottom:14px'>{day}</div>"]
-    if soon:
-        html.append("<h3 style='margin:14px 0 4px'>Soon</h3><ul style='padding-left:18px'>")
-        html += [li(t) for t in soon]; html.append("</ul>")
-    if later:
-        html.append("<h3 style='margin:14px 0 4px'>Coming up</h3><ul style='padding-left:18px'>")
-        html += [li(t, due=False) for t in later]; html.append("</ul>")
-    if not soon and not later:
+    if dated:
+        html.append("<h3 style='margin:14px 0 2px'>Coming up</h3>"
+                    "<div style='color:#8a96a8;font-size:12px;margin-bottom:4px'>"
+                    "also on your Calendar &amp; Tasks</div><ul style='padding-left:18px'>")
+        html += [li(t) for t in dated]; html.append("</ul>")
+    if undated:
+        html.append("<h3 style='margin:14px 0 4px'>Follow-ups</h3><ul style='padding-left:18px'>")
+        html += [li(t, due=False) for t in undated]; html.append("</ul>")
+    if not dated and not undated:
         html.append("<p>Nothing on the list right now. Enjoy the quiet.</p>")
     html.append("<p style='color:#8a96a8;font-size:12px;margin-top:18px'>"
                 "— Listener · local &amp; private</p></div>")

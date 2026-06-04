@@ -87,6 +87,28 @@
 </div>
 
 <div class="card">
+  <h2>Google Calendar &amp; Tasks</h2>
+  <div class="row" style="border:none;padding-top:0">
+    <div class="av" style="--hue:25">📅</div>
+    <div class="grow">
+      <div class="name">Status:
+        {% if google.connected %}<span class="chip good">connected</span>
+        {% else %}<span class="chip unk">not connected</span>{% endif %}
+      </div>
+      <div class="muted">events → Calendar · to-dos → Tasks · undated → email digest</div>
+    </div>
+  </div>
+  {% if not google.connected %}
+  <p class="muted" style="margin:.7em 0 0">
+    {% if google.client_secret %}OAuth client present — run
+    <code>python google_sync.py --auth</code> in WSL once to authorize.
+    {% else %}Add your OAuth client JSON to <code>~/.listener-gcp/client_secret.json</code>,
+    then run <code>python google_sync.py --auth</code>.{% endif %}
+  </p>
+  {% endif %}
+</div>
+
+<div class="card">
   <h2>Privacy</h2>
   <p class="muted" style="margin:0">All audio, transcripts, voiceprints, and the assistant
   run <b>locally</b> on this machine. The dashboard is reachable only over your Tailscale

@@ -24,17 +24,25 @@ UTC = ZoneInfo("UTC")
 OLLAMA = "http://127.0.0.1:11434/api/chat"
 MODEL = "qwen3:8b"
 
-SYSTEM = """You extract action items from a conversation transcript.
-Return ONLY JSON: {"intents":[{"action": str, "tier": "SOON"|"LATER",
-"speaker": str, "due_text": str|null, "due_local": str|null, "source_quote": str,
-"confidence": number}]}.
+SYSTEM = """You extract action items and follow-ups from a conversation transcript.
+Return ONLY JSON: {"intents":[{"action": str, "kind": "event"|"task"|"followup",
+"tier": "SOON"|"LATER", "speaker": str, "due_text": str|null, "due_local": str|null,
+"source_quote": str, "confidence": number}]}.
+
+kind (this decides where it goes — calendar, tasks, or the digest):
+- "event"    = a scheduled happening at a specific time the person attends (dinner,
+               meeting, appointment, a call at a set time). Usually has a time.
+- "task"     = an actionable to-do to complete (call dentist, take out trash, buy
+               milk), with or without a deadline.
+- "followup" = something to revisit or think about, with NO concrete action or
+               deadline (a topic raised, "we should look into X someday").
 
 Rules:
 - SOON = time-sensitive or needs action today. LATER = tomorrow or later, or informational.
 - Current local time is %(now)s (%(tz)s). Resolve relative times ("tonight",
   "in 2 hours", "tomorrow", "Saturday at 6") to a concrete LOCAL datetime in
   due_local as ISO 8601 like 2026-06-03T19:00. Do NOT convert to UTC. No time → null.
-- Only real action items / reminders / commitments. None → {"intents":[]}.
+- Capture real action items, commitments, and notable follow-ups. None → {"intents":[]}.
 - speaker = who said it, using the transcript's speaker labels.
 """
 
@@ -117,13 +125,13 @@ def run_for_transcript(conn, tid, verbose=False):
         sp = conn.execute("SELECT id FROM speakers WHERE name=?",
                           (it.get("speaker"),)).fetchone()
         conn.execute(
-            "INSERT INTO intents(speaker_id, action, tier, due_at, status, source_quote)"
-            " VALUES (?,?,?,?, 'pending', ?)",
-            (sp["id"] if sp else None, it.get("action"), it.get("tier"),
+            "INSERT INTO intents(speaker_id, action, kind, tier, due_at, status, source_quote)"
+            " VALUES (?,?,?,?,?, 'pending', ?)",
+            (sp["id"] if sp else None, it.get("action"), it.get("kind"), it.get("tier"),
              due.isoformat() if due else None, it.get("source_quote")))
         if verbose:
             due_str = due.strftime("%Y-%m-%d %H:%M UTC") if due else "(no time)"
-            print(f"  [{it.get('tier')}] {it.get('action')}  "
+            print(f"  [{it.get('kind')}/{it.get('tier')}] {it.get('action')}  "
                   f"({it.get('speaker')}, due {due_str})")
     conn.commit()
     return intents

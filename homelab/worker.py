@@ -23,6 +23,7 @@ import sys
 import time
 
 import db
+import google_sync
 import gpu_gate
 import intents
 import profiles
@@ -60,6 +61,10 @@ def process_audio_file(audio, conn=None, chunk_id=None):
     tid = wordattribute.process_audio(audio, MODEL, chunk_id=chunk_id)
     intents.run_for_transcript(conn, tid)
     profiles.update_for_transcript(conn, tid)
+    try:                                  # push events/tasks to Google (ADR-026)
+        google_sync.sync_pending(conn)
+    except Exception as e:  # noqa: BLE001 — Google issues must not fail the chunk
+        print(f"worker: google sync skipped: {e}", flush=True)
     return tid
 
 

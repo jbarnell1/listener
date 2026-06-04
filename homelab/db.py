@@ -74,8 +74,10 @@ CREATE TABLE IF NOT EXISTS intents (
   segment_id   INTEGER REFERENCES segments(id),
   speaker_id   INTEGER REFERENCES speakers(id),
   action       TEXT, tier TEXT, due_at TEXT,        -- due_at stored UTC (ADR-017)
+  kind         TEXT,                                -- event | task | followup (ADR-026)
   status       TEXT NOT NULL DEFAULT 'pending',     -- pending|scheduled|sent|dismissed
   source_quote TEXT,
+  calendar_event_id TEXT, gtask_id TEXT, synced_at TEXT,   -- Google sync (ADR-026)
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 """
@@ -108,6 +110,10 @@ def _migrate(conn):
         conn.execute("ALTER TABLE chunks ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
     if "error" not in ch:
         conn.execute("ALTER TABLE chunks ADD COLUMN error TEXT")
+    it = cols("intents")
+    for col in ("kind", "calendar_event_id", "gtask_id", "synced_at"):
+        if col not in it:
+            conn.execute(f"ALTER TABLE intents ADD COLUMN {col} TEXT")
     conn.commit()
 
 
@@ -208,6 +214,23 @@ def speaker_intents(conn, sid):
 
 def dismiss_intent(conn, iid):
     conn.execute("UPDATE intents SET status='dismissed' WHERE id=?", (iid,))
+    conn.commit()
+
+
+def unsynced_intents(conn):
+    """Pending intents not yet pushed to Google Calendar/Tasks (ADR-026)."""
+    return conn.execute(
+        "SELECT i.*, COALESCE(sp.name, 'Unknown_' || sp.id) AS who FROM intents i "
+        "LEFT JOIN speakers sp ON sp.id = i.speaker_id "
+        "WHERE i.synced_at IS NULL AND i.status != 'dismissed' ORDER BY i.id").fetchall()
+
+
+def mark_intent_synced(conn, iid, calendar_event_id=None, gtask_id=None):
+    conn.execute(
+        "UPDATE intents SET synced_at=datetime('now'), "
+        "calendar_event_id=COALESCE(?, calendar_event_id), "
+        "gtask_id=COALESCE(?, gtask_id) WHERE id=?",
+        (calendar_event_id, gtask_id, iid))
     conn.commit()
 
 

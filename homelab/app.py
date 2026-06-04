@@ -26,6 +26,7 @@ from fastapi.templating import Jinja2Templates
 
 import assistant
 import db
+import google_sync
 import gpu_gate
 import mailer
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -283,6 +284,7 @@ def settings(request: Request, mail: str = ""):
                 queue=db.queue_stats(db.connect()),
                 gpu_clear=gpu_clear, gpu_detail=gpu_detail,
                 asr_model=os.environ.get("LISTENER_ASR_MODEL", "large-v3"),
+                google=google_sync.status(),
                 mail_configured=mailer.configured(),
                 mail_to=(os.environ.get("LISTENER_MAIL_TO")
                          or os.environ.get("LISTENER_SMTP_USER") or "—"),

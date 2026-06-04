@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Transcript #{{ t.id }}</h1>
+<p class="muted">{{ t.audio_path }} · {{ t.created_at }}</p>
+<div class="card">
+  {% for s in segments %}
+    <div class="seg">
+      <span class="who"><a href="/speakers/{{ s.speaker_id }}">{{ s.who }}</a></span>
+      <span class="muted">[{{ '%.2f'|format(s.t_start) }}]</span> {{ s.text }}
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

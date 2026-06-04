@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ sp.label }} <span class="pill">{{ sp.status }}</span></h1>
+{% if sp.relationship %}<p class="muted">{{ sp.relationship }}</p>{% endif %}
+
+<div class="card">
+  <h2>Name / label</h2>
+  <form method="post" action="/speakers/{{ sp.id }}/name">
+    <input name="name" placeholder="e.g. Sarah" value="{{ sp.name or '' }}">
+    <button>Save</button>
+  </form>
+  <p class="muted">Naming an unknown speaker makes them recognized everywhere.</p>
+</div>
+
+<div class="card">
+  <h2>Recent segments</h2>
+  {% for s in segments %}
+    <div class="seg">
+      <span class="muted">[{{ '%.2f'|format(s.t_start) }}]</span> {{ s.text }}
+      <audio controls preload="none" src="/segment/{{ s.id }}/audio.wav"></audio>
+    </div>
+  {% else %}<p class="muted">none</p>{% endfor %}
+</div>
+{% endblock %}

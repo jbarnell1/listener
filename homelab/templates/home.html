@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Dashboard</h1>
+<div class="card">
+  <span class="pill">{{ counts.speakers }} speakers</span>
+  <span class="pill">{{ counts.transcripts }} transcripts</span>
+  <span class="pill">{{ counts.segments }} segments</span>
+  <span class="pill">{{ counts.intents }} tasks</span>
+</div>
+<div class="card">
+  <h2>Recent transcripts</h2>
+  {% for t in transcripts %}
+    <div class="seg">
+      <a href="/transcripts/{{ t.id }}">#{{ t.id }} — {{ t.audio_path }}</a>
+      <span class="muted">· {{ t.n_segments }} segments · {{ t.created_at }}</span>
+    </div>
+  {% else %}<p class="muted">none yet</p>{% endfor %}
+</div>
+<div class="card">
+  <h2>Speakers</h2>
+  {% for s in speakers %}
+    <div class="seg">
+      <a href="/speakers/{{ s.id }}">{{ s.label }}</a>
+      <span class="pill">{{ s.status }}</span>
+      <span class="muted">{{ s.n_segments }} segments</span>
+    </div>
+  {% else %}<p class="muted">none yet</p>{% endfor %}
+</div>
+{% endblock %}

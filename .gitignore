@@ -21,6 +21,7 @@ audio/
 # Speaker voiceprints (biometric) + downloaded model caches — never commit
 speakers.json
 models/
+homelab/data/   # ingested audio chunks (sensitive)
 
 # Python
 __pycache__/

@@ -88,6 +88,75 @@ def init_db(path: str = DB_PATH) -> sqlite3.Connection:
     return conn
 
 
+# --- dashboard read/write helpers (pure SQL; usable from the light web venv) ---
+
+def counts(conn):
+    return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in TABLES}
+
+
+def recent_transcripts(conn, limit=25):
+    return conn.execute(
+        "SELECT t.id, t.audio_path, t.created_at, COUNT(s.id) AS n_segments "
+        "FROM transcripts t LEFT JOIN segments s ON s.transcript_id = t.id "
+        "GROUP BY t.id ORDER BY t.id DESC LIMIT ?", (limit,)).fetchall()
+
+
+def transcript(conn, tid):
+    return conn.execute("SELECT * FROM transcripts WHERE id=?", (tid,)).fetchone()
+
+
+def transcript_segments(conn, tid):
+    return conn.execute(
+        "SELECT s.*, COALESCE(sp.name, 'Unknown_' || sp.id, '?') AS who "
+        "FROM segments s LEFT JOIN speakers sp ON sp.id = s.speaker_id "
+        "WHERE s.transcript_id = ? ORDER BY s.t_start", (tid,)).fetchall()
+
+
+def list_speakers(conn):
+    return conn.execute(
+        "SELECT sp.id, sp.name, sp.status, sp.relationship, "
+        "COALESCE(sp.name, 'Unknown_' || sp.id) AS label, "
+        "(SELECT COUNT(*) FROM segments s WHERE s.speaker_id = sp.id) AS n_segments "
+        "FROM speakers sp ORDER BY (sp.status = 'unknown'), sp.id").fetchall()
+
+
+def get_speaker(conn, sid):
+    return conn.execute(
+        "SELECT *, COALESCE(name, 'Unknown_' || id) AS label FROM speakers WHERE id=?",
+        (sid,)).fetchone()
+
+
+def speaker_segments(conn, sid, limit=50):
+    return conn.execute(
+        "SELECT s.*, t.audio_path FROM segments s JOIN transcripts t ON t.id = s.transcript_id "
+        "WHERE s.speaker_id = ? ORDER BY s.id DESC LIMIT ?", (sid, limit)).fetchall()
+
+
+def get_segment(conn, seg_id):
+    return conn.execute(
+        "SELECT s.*, t.audio_path FROM segments s JOIN transcripts t ON t.id = s.transcript_id "
+        "WHERE s.id = ?", (seg_id,)).fetchone()
+
+
+def unknown_speakers(conn):
+    return conn.execute(
+        "SELECT sp.id, COALESCE(sp.name, 'Unknown_' || sp.id) AS label, "
+        "(SELECT COUNT(*) FROM segments s WHERE s.speaker_id = sp.id) AS n_segments "
+        "FROM speakers sp WHERE sp.status = 'unknown' ORDER BY sp.id").fetchall()
+
+
+def enrolled_speakers(conn):
+    return conn.execute(
+        "SELECT id, name FROM speakers WHERE status='enrolled' AND name IS NOT NULL "
+        "ORDER BY name").fetchall()
+
+
+def rename_speaker(conn, sid, name):
+    conn.execute("UPDATE speakers SET name=?, status='enrolled', updated_at=datetime('now') "
+                 "WHERE id=?", (name, sid))
+    conn.commit()
+
+
 if __name__ == "__main__":
     c = init_db()
     print(f"db: {DB_PATH}")

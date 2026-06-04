@@ -91,6 +91,26 @@ same voice re-matches across recordings (`rename()` to label them).
 Why not a vector DB? Speaker matching is cosine over a handful of people — instant
 in numpy. SQLite is the right tool until there are thousands of speakers.
 
+## Dashboard + ingest — FastAPI + HTMX (ADR-019)
+Light venv (`~/listener-web`, no ML deps). Tailnet-only dashboard + HMAC `/ingest`.
+```bash
+uv venv ~/listener-web --python 3.10
+uv pip install --python ~/listener-web/bin/python -r requirements-web.txt
+cd /mnt/c/Listener/homelab
+~/listener-web/bin/uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+```
+Open **http://localhost:8000** (WSL forwards to Windows). Pages: home, `/speakers`,
+`/transcripts/{id}` (named segments), `/unknown` (snippet playback + name/tag).
+`/segment/{id}/audio.wav` slices audio on demand (404 after the 30-day purge).
+`POST /ingest` verifies `X-Sig` HMAC-SHA256(secret, ts+body) + 5-min replay window.
+
+**Remote (phone) access — Tailscale Serve (tailnet-only, no public exposure):**
+```bash
+tailscale serve --bg 8000      # → https://<machine>.<tailnet>.ts.net
+# later, expose ONLY ingest publicly for away-uploads:
+# tailscale funnel --set-path /ingest --bg 8000
+```
+
 ## Milestone status (PIPELINE.md H1–H6)
 - [x] **H1** — WSL2 + CUDA + faster-whisper transcribes a WAV
 - [ ] H2 — FastAPI `/ingest` (verify HMAC, store, ACK)

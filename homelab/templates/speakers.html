@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Speakers</h1>
+<div class="card">
+  <table>
+    <tr><th>Speaker</th><th>Status</th><th>Segments</th></tr>
+    {% for s in speakers %}
+      <tr>
+        <td><a href="/speakers/{{ s.id }}">{{ s.label }}</a></td>
+        <td><span class="pill">{{ s.status }}</span></td>
+        <td>{{ s.n_segments }}</td>
+      </tr>
+    {% else %}<tr><td colspan="3" class="muted">none yet</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

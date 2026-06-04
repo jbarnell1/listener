@@ -1,0 +1,8 @@
+# Listener homelab — web dashboard + ingest (FastAPI + HTMX). Light venv, no ML deps.
+#   uv venv ~/listener-web --python 3.10
+#   uv pip install --python ~/listener-web/bin/python -r requirements-web.txt
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+httpx

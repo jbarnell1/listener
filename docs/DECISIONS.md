@@ -5,6 +5,31 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-021 — Retention: audio 30 days, transcripts indefinite
+**2026-06-03.** Raw **audio kept 30 days** (enough to replay snippets for speaker
+tagging/re-tagging), then auto-purged by a daily job. **Transcripts, segments,
+embeddings, and profiles kept indefinitely** (text + derived vectors, far less
+sensitive than raw audio). Snippet playback degrades to text-only once a chunk's
+audio is gone. Resolves Q-S4. Privacy: local-only (ADR-016) + tailnet-only
+(ADR-019) + `do_not_profile` (Q-S5).
+
+### ADR-020 — Page assistant: dedicated MCP server + small local model
+**2026-06-03.** The dashboard's conversational helper is a **dedicated MCP server**
+exposing scoped DB tools (find_profile, edit_task, tag/merge_speaker, …) — no raw
+SQL. Driven by a **small fast local model via Ollama** (separate from the heavy
+intent-split model; shortlist Qwen3-4B / Llama-3.2-3B / Phi-4-mini / Gemma-3-4B,
+benchmark). **Restartable from the dashboard Settings page** (revive it remotely if
+WSL drops it). Fully local now; Gemini Flash deferred (security paramount).
+
+### ADR-019 — Web app: FastAPI + HTMX, Tailscale Serve (+ Funnel for /ingest)
+**2026-06-03.** One FastAPI app = `/ingest` (signed device upload) + HTMX/Jinja
+dashboard (profiles, tasks, speaker-tagging, edit) + the assistant. Server-rendered
+HTMX (no JS build). **Security: zero port-forwarding.** Dashboard via **Tailscale
+Serve** (tailnet-only HTTPS, reach from phone anywhere, invisible to public).
+**Only `/ingest`** is exposed publicly via **Tailscale Funnel**, HMAC+token+replay
+locked. Tailscale ACLs = the allowlist. Reads/writes `listener.db`; snippets sliced
+on-demand from stored audio.
+
 ### ADR-018 — Upload cadence: batched bursts, radio off between
 **2026-06-03.** Device records continuously (VAD) to NAND; the WiFi radio stays
 **off** between uploads. Uploads in batched bursts: **default every ~15–30 min on
@@ -157,7 +182,7 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
 - **Q-S2: Email transport** — Gmail API vs SMTP app-password? "Day Ahead" + timed
   emails. Confirm the Google Workspace account + intended tagging scheme.
 - *Resolved:* Q-S3 → ADR-016 (fully local via Ollama; model TBD from 12GB shortlist).
-- **Q-S4: Audio retention policy** — keep raw audio how long after transcription?
+- *Resolved:* Q-S4 → ADR-021 (audio 30 days, transcripts/embeddings/profiles indefinite).
 - **Q-S5: Voice-profile consent & retention** (ADR-014) — third parties haven't
   opted in. Retention of embeddings, `do_not_profile` list, delete-a-person,
   local-only guarantee (voice data never leaves the homelab).

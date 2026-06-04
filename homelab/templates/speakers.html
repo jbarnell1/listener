@@ -1,16 +1,18 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>Speakers</h1>
+<h1 class="page">Speakers</h1>
+<p class="sub">Everyone we've heard. Known voices are recognized automatically.</p>
 <div class="card">
-  <table>
-    <tr><th>Speaker</th><th>Status</th><th>Segments</th></tr>
-    {% for s in speakers %}
-      <tr>
-        <td><a href="/speakers/{{ s.id }}">{{ s.label }}</a></td>
-        <td><span class="pill">{{ s.status }}</span></td>
-        <td>{{ s.n_segments }}</td>
-      </tr>
-    {% else %}<tr><td colspan="3" class="muted">none yet</td></tr>{% endfor %}
-  </table>
+  {% for s in speakers %}
+    <a href="/speakers/{{ s.id }}" class="row" style="color:inherit;--hue:{{ s.id|hue }}">
+      <div class="av">{{ s.label|initials }}</div>
+      <div class="grow">
+        <div class="name">{{ s.label }}</div>
+        <div class="muted">{{ s.n_segments }} segments{% if s.relationship %} · {{ s.relationship }}{% endif %}</div>
+      </div>
+      {% if s.status == 'enrolled' %}<span class="chip good">known</span>
+      {% else %}<span class="chip unk">unknown</span>{% endif %}
+    </a>
+  {% else %}<div class="empty">No speakers yet</div>{% endfor %}
 </div>
 {% endblock %}

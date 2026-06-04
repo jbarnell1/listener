@@ -1,29 +1,41 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>Dashboard</h1>
-<div class="card">
-  <span class="pill">{{ counts.speakers }} speakers</span>
-  <span class="pill">{{ counts.transcripts }} transcripts</span>
-  <span class="pill">{{ counts.segments }} segments</span>
-  <span class="pill">{{ counts.intents }} tasks</span>
+<h1 class="page">Dashboard</h1>
+<p class="sub">Captured, transcribed, and attributed — all on your own machine.</p>
+
+<div class="stats">
+  <div class="stat"><div class="n">{{ counts.speakers }}</div><div class="l">Speakers</div></div>
+  <div class="stat"><div class="n">{{ counts.transcripts }}</div><div class="l">Transcripts</div></div>
+  <div class="stat"><div class="n">{{ counts.segments }}</div><div class="l">Segments</div></div>
+  <div class="stat"><div class="n">{{ counts.intents }}</div><div class="l">Tasks</div></div>
 </div>
+
 <div class="card">
   <h2>Recent transcripts</h2>
   {% for t in transcripts %}
-    <div class="seg">
-      <a href="/transcripts/{{ t.id }}">#{{ t.id }} — {{ t.audio_path }}</a>
-      <span class="muted">· {{ t.n_segments }} segments · {{ t.created_at }}</span>
-    </div>
-  {% else %}<p class="muted">none yet</p>{% endfor %}
+    <a href="/transcripts/{{ t.id }}" class="row" style="color:inherit;--hue:{{ t.id|hue }}">
+      <div class="av">#{{ t.id }}</div>
+      <div class="grow">
+        <div class="name">{{ t.audio_path }}</div>
+        <div class="muted">{{ t.n_segments }} segments · {{ t.created_at }}</div>
+      </div>
+      <span class="chevron">›</span>
+    </a>
+  {% else %}<div class="empty">No transcripts yet</div>{% endfor %}
 </div>
+
 <div class="card">
   <h2>Speakers</h2>
   {% for s in speakers %}
-    <div class="seg">
-      <a href="/speakers/{{ s.id }}">{{ s.label }}</a>
-      <span class="pill">{{ s.status }}</span>
-      <span class="muted">{{ s.n_segments }} segments</span>
-    </div>
-  {% else %}<p class="muted">none yet</p>{% endfor %}
+    <a href="/speakers/{{ s.id }}" class="row" style="color:inherit;--hue:{{ s.id|hue }}">
+      <div class="av">{{ s.label|initials }}</div>
+      <div class="grow">
+        <div class="name">{{ s.label }}</div>
+        <div class="muted">{{ s.n_segments }} segments</div>
+      </div>
+      {% if s.status == 'enrolled' %}<span class="chip good">known</span>
+      {% else %}<span class="chip unk">unknown</span>{% endif %}
+    </a>
+  {% else %}<div class="empty">No speakers yet</div>{% endfor %}
 </div>
 {% endblock %}

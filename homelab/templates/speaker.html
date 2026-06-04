@@ -1,24 +1,36 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>{{ sp.label }} <span class="pill">{{ sp.status }}</span></h1>
-{% if sp.relationship %}<p class="muted">{{ sp.relationship }}</p>{% endif %}
+<div class="card" style="--hue:{{ sp.id|hue }};display:flex;align-items:center;gap:14px">
+  <div class="av lg">{{ sp.label|initials }}</div>
+  <div class="grow">
+    <h1 class="page" style="margin:0">{{ sp.label }}</h1>
+    <div class="muted" style="margin-top:4px">
+      {% if sp.status == 'enrolled' %}<span class="chip good">known</span>
+      {% else %}<span class="chip unk">unknown</span>{% endif %}
+      · {{ segments|length }} recent segments
+    </div>
+  </div>
+</div>
 
 <div class="card">
-  <h2>Name / label</h2>
-  <form method="post" action="/speakers/{{ sp.id }}/name">
+  <h2>Name</h2>
+  <form method="post" action="/speakers/{{ sp.id }}/name" class="field">
     <input name="name" placeholder="e.g. Sarah" value="{{ sp.name or '' }}">
-    <button>Save</button>
+    <button class="btn">Save</button>
   </form>
-  <p class="muted">Naming an unknown speaker makes them recognized everywhere.</p>
+  <p class="muted" style="margin:.7em 0 0">Naming a speaker makes them recognized everywhere.</p>
 </div>
 
 <div class="card">
   <h2>Recent segments</h2>
   {% for s in segments %}
-    <div class="seg">
-      <span class="muted">[{{ '%.2f'|format(s.t_start) }}]</span> {{ s.text }}
+    <div class="row">
+      <div class="grow">
+        <div>{{ s.text }}</div>
+        <div class="muted">[{{ '%.1f'|format(s.t_start) }}s]</div>
+      </div>
       <audio controls preload="none" src="/segment/{{ s.id }}/audio.wav"></audio>
     </div>
-  {% else %}<p class="muted">none</p>{% endfor %}
+  {% else %}<div class="empty">No segments</div>{% endfor %}
 </div>
 {% endblock %}

@@ -1,23 +1,40 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>Unknown speakers</h1>
-<p class="muted">Voices we couldn't match. Listen to a snippet, then name them —
-they'll be recognized automatically from then on.</p>
+<h1 class="page">Unknown speakers</h1>
+<p class="sub">Voices we couldn't place. Listen, then merge into a known person
+(improves their voiceprint) or name as new — they're recognized from then on.</p>
+
 {% for u in unknowns %}
-  <div class="card">
-    <h2>{{ u.label }} <span class="muted">· {{ u.n_segments }} segments</span></h2>
+  <div class="card" id="unk-{{ u.id }}" style="--hue:{{ u.id|hue }}">
+    <div class="row" style="border:none;padding-bottom:6px">
+      <div class="av">?</div>
+      <div class="grow"><div class="name">{{ u.label }}</div>
+        <div class="muted">{{ u.n_segments }} segments</div></div>
+    </div>
     {% for s in samples[u.id] %}
-      <div class="seg">
-        <span class="muted">[{{ '%.2f'|format(s.t_start) }}]</span> {{ s.text }}
+      <div class="row">
+        <div class="grow">{{ s.text }} <span class="muted">[{{ '%.1f'|format(s.t_start) }}s]</span></div>
         <audio controls preload="none" src="/segment/{{ s.id }}/audio.wav"></audio>
       </div>
-    {% else %}<p class="muted">no segments</p>{% endfor %}
-    <form method="post" action="/speakers/{{ u.id }}/name" style="margin-top:10px">
-      <input name="name" placeholder="Name this speaker">
-      <button>Save</button>
-    </form>
+    {% endfor %}
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+      {% if enrolled %}
+        <form class="field" hx-post="/speakers/{{ u.id }}/merge"
+              hx-target="#unk-{{ u.id }}" hx-swap="outerHTML">
+          <select name="target">
+            {% for e in enrolled %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}
+          </select>
+          <button class="btn ghost">Merge into ↑</button>
+        </form>
+      {% endif %}
+      <form class="field" hx-post="/speakers/{{ u.id }}/name"
+            hx-target="#unk-{{ u.id }}" hx-swap="outerHTML">
+        <input name="name" placeholder="Name as a new person">
+        <button class="btn">Save</button>
+      </form>
+    </div>
   </div>
 {% else %}
-  <div class="card"><p class="muted">No unknown speakers — every voice is recognized. 🎉</p></div>
+  <div class="card"><div class="empty">Every voice is recognized 🎉</div></div>
 {% endfor %}
 {% endblock %}

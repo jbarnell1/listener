@@ -157,6 +157,26 @@ def rename_speaker(conn, sid, name):
     conn.commit()
 
 
+def merge_speakers(conn, src_id, dst_id):
+    """Merge src speaker into dst: weighted-average their centroids (so dst's
+    voiceprint improves), reassign src's segments to dst, delete src. Pure stdlib."""
+    import array
+    cur = conn.cursor()
+    s = cur.execute("SELECT vec, n_samples FROM embeddings WHERE speaker_id=? AND is_centroid=1",
+                    (src_id,)).fetchone()
+    d = cur.execute("SELECT id, vec, n_samples FROM embeddings WHERE speaker_id=? AND is_centroid=1",
+                    (dst_id,)).fetchone()
+    if s and d:
+        sv, dv = array.array("f", s["vec"]), array.array("f", d["vec"])
+        ns, nd = s["n_samples"], d["n_samples"]
+        merged = array.array("f", [(dv[i] * nd + sv[i] * ns) / (nd + ns) for i in range(len(dv))])
+        cur.execute("UPDATE embeddings SET vec=?, n_samples=? WHERE id=?",
+                    (merged.tobytes(), nd + ns, d["id"]))
+    cur.execute("UPDATE segments SET speaker_id=? WHERE speaker_id=?", (dst_id, src_id))
+    cur.execute("DELETE FROM speakers WHERE id=?", (src_id,))  # cascades its embeddings
+    conn.commit()
+
+
 if __name__ == "__main__":
     c = init_db()
     print(f"db: {DB_PATH}")

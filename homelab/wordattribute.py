@@ -43,13 +43,15 @@ def turn_of_word(w, turns):
     return min(turns, key=lambda t: abs(mid - (t["start"] + t["end"]) / 2)) if turns else None
 
 
-def main():
-    audio = sys.argv[1] if len(sys.argv) > 1 else "samples/two.wav"
-    model = sys.argv[2] if len(sys.argv) > 2 else "small.en"
-
-    print("[1/2] whisperx transcribe + align (cu128) ...", file=sys.stderr, flush=True)
+def process_audio(audio, model="large-v3", chunk_id=None, verbose=False):
+    """Transcribe + diarize + identify `audio`, persist a word-level speaker-
+    attributed transcript, and return its transcript id. GPU-heavy (the caller is
+    responsible for the GPU gate). `chunk_id` links it back to the ingested chunk."""
+    if verbose:
+        print("[1/2] whisperx transcribe + align (cu128) ...", file=sys.stderr, flush=True)
     words = run_json(WX_PY, "wx_align.py", audio, model)
-    print("[2/2] diarize + identify       (cu13)  ...", file=sys.stderr, flush=True)
+    if verbose:
+        print("[2/2] diarize + identify       (cu13)  ...", file=sys.stderr, flush=True)
     turns = run_json(DIAR_PY, "identify.py", audio)
 
     # assign each word to a speaker, then group consecutive same-speaker words
@@ -62,21 +64,27 @@ def main():
         blocks[-1]["words"].append(w["word"])
         blocks[-1]["end"] = w["end"]
 
-    conn = db.init_db()
+    conn = db.connect()
     cur = conn.cursor()
-    cur.execute("INSERT INTO transcripts(audio_path, lang) VALUES (?, 'en')", (audio,))
+    cur.execute("INSERT INTO transcripts(chunk_id, audio_path, lang) VALUES (?, ?, 'en')",
+                (chunk_id, audio))
     tid = cur.lastrowid
-
-    print(f"\n=== Word-level speaker-attributed transcript: {audio} ===")
     for b in blocks:
         text = " ".join(b["words"]).replace("  ", " ").strip()
         cur.execute("INSERT INTO segments(transcript_id, speaker_id, t_start, t_end, text)"
                     " VALUES (?,?,?,?,?)", (tid, b["sid"], b["start"], b["end"], text))
-        print(f"\n{b['name']}:")
-        print(f"  [{b['start']:6.2f}] {text}")
+        if verbose:
+            print(f"\n{b['name']}:\n  [{b['start']:6.2f}] {text}")
     conn.commit()
-    print(f"\nsaved transcript #{tid} ({len(blocks)} speaker-blocks) -> listener.db",
-          file=sys.stderr)
+    return tid
+
+
+def main():
+    audio = sys.argv[1] if len(sys.argv) > 1 else "samples/two.wav"
+    model = sys.argv[2] if len(sys.argv) > 2 else "small.en"
+    print(f"=== Word-level speaker-attributed transcript: {audio} ===")
+    tid = process_audio(audio, model, verbose=True)
+    print(f"\nsaved transcript #{tid} -> listener.db", file=sys.stderr)
 
 
 if __name__ == "__main__":

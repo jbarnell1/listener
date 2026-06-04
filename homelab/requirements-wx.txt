@@ -7,3 +7,6 @@
 # Forced alignment (wav2vec2) model downloads on first run (open, no gating).
 
 whisperx==3.8.6
+# whisperx only requires transformers>=4.48.0 (no ceiling); transformers 4.57.x
+# broke its import path, so pin a known-good version. (ADR-025)
+transformers==4.48.0

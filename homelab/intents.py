@@ -103,6 +103,32 @@ def seed_demo(conn):
     return tid
 
 
+def run_for_transcript(conn, tid, verbose=False):
+    """Extract action items from transcript `tid` (speaker-aware) and store them.
+    Returns the list of intents. Used by the worker and the CLI."""
+    convo = conversation_for(tid)
+    now_local = datetime.now(TZ)
+    system = SYSTEM % {"now": now_local.strftime("%Y-%m-%d %H:%M (%A)"), "tz": TZ_NAME}
+    raw = ollama_chat(system, convo)
+    data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
+    intents = data.get("intents", [])
+    for it in intents:
+        due = to_utc(it.get("due_local"), it.get("due_text"), now_local)
+        sp = conn.execute("SELECT id FROM speakers WHERE name=?",
+                          (it.get("speaker"),)).fetchone()
+        conn.execute(
+            "INSERT INTO intents(speaker_id, action, tier, due_at, status, source_quote)"
+            " VALUES (?,?,?,?, 'pending', ?)",
+            (sp["id"] if sp else None, it.get("action"), it.get("tier"),
+             due.isoformat() if due else None, it.get("source_quote")))
+        if verbose:
+            due_str = due.strftime("%Y-%m-%d %H:%M UTC") if due else "(no time)"
+            print(f"  [{it.get('tier')}] {it.get('action')}  "
+                  f"({it.get('speaker')}, due {due_str})")
+    conn.commit()
+    return intents
+
+
 def main():
     demo = "--demo" in sys.argv
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -113,38 +139,15 @@ def main():
     else:
         tid = int(args[0]) if args else conn.execute(
             "SELECT MAX(id) FROM transcripts").fetchone()[0]
-    convo = conversation_for(tid)
 
-    now_local = datetime.now(TZ)
-    system = SYSTEM % {"now": now_local.strftime("%Y-%m-%d %H:%M (%A)"), "tz": TZ_NAME}
-
-    print(f"--- conversation ---\n{convo}\n", flush=True)
+    print(f"--- conversation ---\n{conversation_for(tid)}\n", flush=True)
     print(f"--- extracting with {MODEL} ---", flush=True)
-    raw = ollama_chat(system, convo)
-    data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
-    intents = data.get("intents", [])
-
-    print(f"\n=== {len(intents)} intent(s) ===")
-    for it in intents:
-        due = to_utc(it.get("due_local"), it.get("due_text"), now_local)
-        due_str = due.strftime("%Y-%m-%d %H:%M UTC") if due else "(no time)"
-        local_str = due.astimezone(TZ).strftime("%a %H:%M") if due else "-"
-        print(f"  [{it.get('tier')}] {it.get('action')}")
-        print(f"        speaker={it.get('speaker')}  due={due_str}  (local {local_str})")
-        print(f"        quote: \"{it.get('source_quote')}\"")
-        sp = conn.execute("SELECT id FROM speakers WHERE name=?", (it.get("speaker"),)).fetchone()
-        conn.execute(
-            "INSERT INTO intents(speaker_id, action, tier, due_at, status, source_quote)"
-            " VALUES (?,?,?,?, 'pending', ?)",
-            (sp["id"] if sp else None, it.get("action"), it.get("tier"),
-             due.isoformat() if due else None, it.get("source_quote")))
-    conn.commit()
+    intents = run_for_transcript(conn, tid, verbose=True)
     print(f"\nstored {len(intents)} intent(s) for transcript #{tid} -> listener.db")
 
-    # continuously enrich speaker profiles from this same transcript (ADR-023).
-    try:
-        import profile
-        done = profile.update_for_transcript(conn, tid)
+    try:                                      # continuously enrich profiles (ADR-023)
+        import profiles
+        done = profiles.update_for_transcript(conn, tid)
         print(f"enriched {len(done)} speaker profile(s)")
     except Exception as e:
         print(f"(profile enrichment skipped: {e})")

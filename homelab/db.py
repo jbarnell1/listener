@@ -38,7 +38,9 @@ CREATE TABLE IF NOT EXISTS chunks (
   device      TEXT, seq INTEGER, ts_start TEXT, codec TEXT,
   bytes       INTEGER, path TEXT,
   acked       INTEGER NOT NULL DEFAULT 0,
-  transcribed INTEGER NOT NULL DEFAULT 0,
+  transcribed INTEGER NOT NULL DEFAULT 0,    -- 0 pending · 1 done · -1 failed
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  error       TEXT,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS transcripts (
@@ -101,6 +103,11 @@ def _migrate(conn):
                 "dates_json", "notable_json", "topics_json", "recurring_json"):
         if col not in have:
             conn.execute(f"ALTER TABLE profiles ADD COLUMN {col} TEXT")
+    ch = cols("chunks")
+    if "attempts" not in ch:
+        conn.execute("ALTER TABLE chunks ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+    if "error" not in ch:
+        conn.execute("ALTER TABLE chunks ADD COLUMN error TEXT")
     conn.commit()
 
 
@@ -321,6 +328,37 @@ def delete_speaker(conn, sid):
     conn.commit()
     return {"speaker_id": sid, "tasks": n_tasks, "segments": n_segs,
             "transcripts_removed": removed_tx}
+
+
+# --- processing queue (worker.py drains ingested chunks) ---
+
+def next_pending_chunk(conn, max_attempts=3):
+    return conn.execute(
+        "SELECT * FROM chunks WHERE transcribed=0 AND attempts < ? "
+        "ORDER BY id LIMIT 1", (max_attempts,)).fetchone()
+
+
+def mark_chunk_done(conn, cid):
+    conn.execute("UPDATE chunks SET transcribed=1, error=NULL WHERE id=?", (cid,))
+    conn.commit()
+
+
+def mark_chunk_error(conn, cid, err, max_attempts=3):
+    """Record a failed attempt; flag the chunk failed (transcribed=-1) once it
+    has exhausted its retries so it stops blocking the queue."""
+    conn.execute(
+        "UPDATE chunks SET attempts=attempts+1, error=?, "
+        "transcribed=CASE WHEN attempts+1 >= ? THEN -1 ELSE 0 END WHERE id=?",
+        (str(err)[:500], max_attempts, cid))
+    conn.commit()
+
+
+def queue_stats(conn):
+    row = conn.execute(
+        "SELECT SUM(transcribed=0) AS pending, SUM(transcribed=1) AS done, "
+        "SUM(transcribed=-1) AS failed FROM chunks").fetchone()
+    return {"pending": row["pending"] or 0, "done": row["done"] or 0,
+            "failed": row["failed"] or 0}
 
 
 if __name__ == "__main__":

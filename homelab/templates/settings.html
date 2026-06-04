@@ -25,6 +25,34 @@
 </div>
 
 <div class="card">
+  <h2>Pipeline worker</h2>
+  <div class="row" style="border:none;padding-top:0">
+    <div class="av" style="--hue:200">⚙️</div>
+    <div class="grow">
+      <div class="name">Status:
+        {% if worker_running %}<span class="chip good">running</span>
+        {% else %}<span class="chip unk">stopped</span>{% endif %}
+        {% if worker.state %}<span class="muted">· {{ worker.state }}{% if worker.detail %} — {{ worker.detail }}{% endif %}</span>{% endif %}
+      </div>
+      <div class="muted">ASR <b>{{ asr_model }}</b> · transcribe → diarize → ID → intents → profile</div>
+    </div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin:.6em 0">
+    <span class="chip">queue: {{ queue.pending }} pending</span>
+    <span class="chip good">{{ queue.done }} done</span>
+    {% if queue.failed %}<span class="chip unk">{{ queue.failed }} failed</span>{% endif %}
+    <span class="chip {{ 'good' if gpu_clear else 'unk' }}">GPU {{ 'clear' if gpu_clear else 'busy' }} · {{ gpu_detail }}</span>
+  </div>
+  <div class="field">
+    <form method="post" action="/settings/worker/restart"><button class="btn">Restart</button></form>
+    <form method="post" action="/settings/worker/start"><button class="btn ghost">Start</button></form>
+    <form method="post" action="/settings/worker/stop"><button class="btn ghost">Stop</button></form>
+  </div>
+  <p class="muted" style="margin:.8em 0 0">Drains ingested audio when the GPU is free
+  (pauses while you game — ADR-015). Backlog self-heals after downtime.</p>
+</div>
+
+<div class="card">
   <h2>Email · nightly brief</h2>
   {% if mail == 'sent' %}
     <div class="empty" style="color:var(--good);padding:8px 0">✓ Test email sent — check

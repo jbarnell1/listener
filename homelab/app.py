@@ -11,6 +11,7 @@ import contextlib
 import hashlib
 import hmac
 import html
+import json
 import os
 import subprocess
 import sys
@@ -25,6 +26,7 @@ from fastapi.templating import Jinja2Templates
 
 import assistant
 import db
+import gpu_gate
 import mailer
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -54,21 +56,51 @@ class MCPManager:
         self.proc = None
 
 
+class WorkerManager:
+    """Owns the pipeline worker subprocess (ADR-025). Singleton via pkill."""
+
+    def __init__(self):
+        self.proc = None
+
+    def running(self):
+        return self.proc is not None and self.proc.poll() is None
+
+    def start(self):
+        subprocess.run(["pkill", "-f", "[w]orker.py"])
+        self.proc = subprocess.Popen(
+            [sys.executable, os.path.join(HERE, "worker.py")], cwd=HERE)
+
+    def stop(self):
+        subprocess.run(["pkill", "-f", "[w]orker.py"])
+        self.proc = None
+
+
 mcp_mgr = MCPManager()
+worker_mgr = WorkerManager()
 scheduler = AsyncIOScheduler(timezone=ZoneInfo("America/Chicago"))
 BRIEF_HOUR, BRIEF_MIN = 23, 50   # 11:50 PM local — lands before midnight (ADR-024)
+
+
+def _worker_status():
+    try:
+        with open("/tmp/listener-worker.json") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
 
 
 @contextlib.asynccontextmanager
 async def lifespan(_app):
     db.init_db()          # ensure schema + run idempotent migrations
-    mcp_mgr.start()       # bring the MCP server up with the dashboard
+    mcp_mgr.start()       # MCP server for the assistant
+    worker_mgr.start()    # pipeline worker draining the ingest queue
     scheduler.add_job(mailer.send_daily_brief,
                       CronTrigger(hour=BRIEF_HOUR, minute=BRIEF_MIN),
                       id="daily_brief", replace_existing=True, misfire_grace_time=3600)
     scheduler.start()     # nightly email brief
     yield
     scheduler.shutdown(wait=False)
+    worker_mgr.stop()
     mcp_mgr.stop()
 
 
@@ -244,8 +276,13 @@ async def assistant_stream(q: str):
 
 @app.get("/settings", response_class=HTMLResponse)
 def settings(request: Request, mail: str = ""):
+    gpu_clear, gpu_detail = gpu_gate.peek()
     return page("settings.html", request, active="settings", mail=mail,
                 mcp_running=mcp_mgr.running(), model=assistant.MODEL,
+                worker_running=worker_mgr.running(), worker=_worker_status(),
+                queue=db.queue_stats(db.connect()),
+                gpu_clear=gpu_clear, gpu_detail=gpu_detail,
+                asr_model=os.environ.get("LISTENER_ASR_MODEL", "large-v3"),
                 mail_configured=mailer.configured(),
                 mail_to=(os.environ.get("LISTENER_MAIL_TO")
                          or os.environ.get("LISTENER_SMTP_USER") or "—"),
@@ -258,6 +295,15 @@ def mcp_control(request: Request, action: str):
         mcp_mgr.start()
     elif action == "stop":
         mcp_mgr.stop()
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/settings/worker/{action}")
+def worker_control(action: str):
+    if action in ("start", "restart"):
+        worker_mgr.start()
+    elif action == "stop":
+        worker_mgr.stop()
     return RedirectResponse("/settings", status_code=303)
 
 

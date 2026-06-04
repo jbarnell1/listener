@@ -11,9 +11,9 @@ transient `recent` (mood) field is overwritten — so one grumpy day never rewri
 who someone is. Fully local; honors the per-speaker opt-out (do_not_profile).
 
 Usage:
-    python profile.py [transcript_id]   # update everyone in that transcript (default: latest)
-    python profile.py --speaker ID      # rebuild one speaker from all their transcripts
-    python profile.py --backfill        # (re)build profiles for every named speaker
+    python profiles.py [transcript_id]   # update everyone in that transcript (default: latest)
+    python profiles.py --speaker ID      # rebuild one speaker from all their transcripts
+    python profiles.py --backfill        # (re)build profiles for every named speaker
 """
 import json
 import sys

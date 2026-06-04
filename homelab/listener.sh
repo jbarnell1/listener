@@ -8,7 +8,8 @@ WEB="$HOME/listener-web/bin"
 APP="/mnt/c/Listener/homelab"
 LOG="/tmp/listener-web.log"
 
-_kill(){ pkill -f '[u]vicorn app:app' 2>/dev/null; pkill -f '[m]cp_server.py' 2>/dev/null; true; }
+_kill(){ pkill -f '[u]vicorn app:app' 2>/dev/null; pkill -f '[m]cp_server.py' 2>/dev/null; \
+         pkill -f '[w]orker.py' 2>/dev/null; true; }
 
 up(){
   _kill; sleep 0.5
@@ -36,6 +37,8 @@ status(){
   fi
   if pgrep -f '[m]cp_server.py' >/dev/null 2>&1; then echo "  mcp server: running"
   else echo "  mcp server: stopped"; fi
+  if pgrep -f '[w]orker.py' >/dev/null 2>&1; then echo "  pipeline worker: running"
+  else echo "  pipeline worker: stopped"; fi
 }
 
 case "${1:-up}" in

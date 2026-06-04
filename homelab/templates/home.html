@@ -1,11 +1,31 @@
 {% extends "base.html" %}
 {% block body %}
+<h1 class="page" style="margin-bottom:2px">{{ greeting }} 👋</h1>
+<p class="sub">Your day, captured and sorted.</p>
+
 <div class="statbar">
   <a href="/speakers"><b>{{ counts.speakers }}</b><span>people</span></a>
-  <a href="/tasks"><b>{{ soon|length + later|length }}</b><span>open tasks</span></a>
+  <a href="/tasks"><b>{{ open_count }}</b><span>open tasks</span></a>
   <a href="/unknown"><b>{{ unknowns|length }}</b><span>to name</span></a>
   <a href="/activity"><b>{{ new_count }}</b><span>new</span></a>
 </div>
+
+<form class="field" method="post" action="/tasks/add" style="margin:0 0 18px">
+  <input name="action" placeholder="✏️  Add a task…" autocomplete="off" required>
+  <button class="btn">Add</button>
+</form>
+
+{% if review %}
+<div class="card" style="border-color:#3a4a6a">
+  <h2>Needs your review</h2>
+  {% for r in review %}
+  <a href="{{ r.href }}" class="row" style="color:inherit">
+    <div class="av" style="--hue:230">{{ r.icon }}</div>
+    <div class="grow"><div class="name">{{ r.text }}</div></div>
+    <span class="chevron">›</span>
+  </a>{% endfor %}
+</div>
+{% endif %}
 
 {% if unknowns %}
 <div class="sec">🔎 Name these voices</div>
@@ -43,23 +63,19 @@
   <a class="muted" href="/unknown">+ {{ unknowns|length - 3 }} more unknown voices →</a>{% endif %}
 {% endif %}
 
-<div class="card">
-  <h2>Up next{% if soon %} · {{ soon|length }}{% endif %}</h2>
-  {% for i in soon[:6] %}{% include "_task.html" %}
-  {% else %}<div class="empty">Nothing urgent — you're on top of it ✨</div>{% endfor %}
-  {% if soon|length > 6 %}<a class="muted" href="/tasks">+ {{ soon|length - 6 }} more →</a>{% endif %}
-</div>
+<div class="sec">📋 Up next</div>
+{% for label, items in task_groups %}
+  <div class="card"{% if label == 'Overdue' %} style="border-color:#5a2a32"{% endif %}>
+    <h2{% if label == 'Overdue' %} style="color:#ff8a8a"{% endif %}>{{ label }} · {{ items|length }}</h2>
+    {% for i in items[:6] %}{% include "_task.html" %}{% endfor %}
+    {% if items|length > 6 %}<a class="muted" href="/tasks">+ {{ items|length - 6 }} more →</a>{% endif %}
+  </div>
+{% else %}
+  <div class="card"><div class="empty">No open tasks — you're all caught up ✨</div></div>
+{% endfor %}
 
-{% if later %}
+<div class="sec">🎙️ Recently captured</div>
 <div class="card">
-  <h2>Coming up later</h2>
-  {% for i in later[:4] %}{% include "_task.html" %}{% endfor %}
-  {% if later|length > 4 %}<a class="muted" href="/tasks">see all {{ later|length }} later items →</a>{% endif %}
-</div>
-{% endif %}
-
-<div class="card">
-  <h2>Recently captured</h2>
   {% for t in transcripts %}
     <a href="/transcripts/{{ t.id }}" class="row" style="color:inherit;--hue:{{ t.id|hue }}">
       <div class="av">🎙️</div>
@@ -69,6 +85,24 @@
       </div>
       <span class="chevron">›</span>
     </a>
-  {% else %}<div class="empty">No conversations yet — upload audio to /ingest</div>{% endfor %}
+  {% else %}<div class="empty">No conversations yet — audio arrives via /ingest</div>{% endfor %}
 </div>
+
+<script>
+// Subtle auto-refresh: keep the dashboard live without interrupting work.
+(function(){
+  const loadedAt = Date.now();
+  function idle(){
+    const sheet = document.getElementById('sheet');
+    const tag = (document.activeElement || {}).tagName;
+    return document.visibilityState === 'visible'
+      && !(sheet && sheet.classList.contains('open'))
+      && !['INPUT','SELECT','TEXTAREA'].includes(tag);
+  }
+  setInterval(()=>{ if(Date.now()-loadedAt > 90000 && idle()) location.reload(); }, 90000);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible' && Date.now()-loadedAt > 30000 && idle()) location.reload();
+  });
+})();
+</script>
 {% endblock %}

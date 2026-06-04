@@ -16,7 +16,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Form, Header, HTTPException, Request, Response
@@ -175,15 +175,83 @@ def _hx(request):
 
 
 # ---- dashboard (tailnet-only) ----
+def _task_groups(rows):
+    """Group open intents into ordered day-buckets for the dashboard."""
+    today = datetime.now(_CT).date()
+    order = ["Overdue", "Today", "Tomorrow", "This week", "Later", "Someday"]
+    b = {k: [] for k in order}
+    for r in rows:
+        if not r["due_at"]:
+            b["Someday"].append(r)
+            continue
+        try:
+            d = datetime.fromisoformat(r["due_at"]).astimezone(_CT).date()
+        except ValueError:
+            b["Someday"].append(r)
+            continue
+        if d < today:
+            b["Overdue"].append(r)
+        elif d == today:
+            b["Today"].append(r)
+        elif d == today + timedelta(days=1):
+            b["Tomorrow"].append(r)
+        elif d <= today + timedelta(days=7):
+            b["This week"].append(r)
+        else:
+            b["Later"].append(r)
+    return [(k, b[k]) for k in order if b[k]]
+
+
+def _review_nudges(c):
+    """Small, actionable 'needs review' items for the dashboard."""
+    nudges = []
+    selfsp = db.get_self(c)
+    enrolled = [s for s in db.list_speakers(c) if s["status"] == "enrolled"]
+    if not selfsp and enrolled:
+        nudges.append({"text": "Tell me which voice is you", "href": "/speakers", "icon": "⭐"})
+    for s in enrolled:
+        if not s["relationship"] and not (selfsp and s["id"] == selfsp["id"]):
+            nudges.append({"text": f"Set how you know {s['label']}",
+                           "href": f"/speakers/{s['id']}", "icon": "🔗"})
+    # profiles refreshed in the last day → worth a glance
+    for r in c.execute("SELECT speaker_id, COALESCE(sp.name,'Unknown_'||sp.id) AS label "
+                       "FROM profiles p JOIN speakers sp ON sp.id=p.speaker_id "
+                       "WHERE p.updated_at > datetime('now','-1 day') "
+                       "ORDER BY p.updated_at DESC LIMIT 3").fetchall():
+        nudges.append({"text": f"{r['label']}'s profile was just updated",
+                       "href": f"/speakers/{r['speaker_id']}", "icon": "✨"})
+    return nudges[:5]
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     c = db.connect()
     unknowns = db.unknown_speakers(c)
     samples = {r["id"]: db.speaker_segments(c, r["id"], limit=1) for r in unknowns}
+    allopen = db.list_intents(c)
+    hour = datetime.now(_CT).hour
+    greeting = ("Good morning" if hour < 12 else
+                "Good afternoon" if hour < 18 else "Good evening")
     return page("home.html", request, active="home", counts=db.counts(c),
-                soon=db.list_intents(c, "SOON"), later=db.list_intents(c, "LATER"),
-                unknowns=unknowns, samples=samples, enrolled=db.enrolled_speakers(c),
-                transcripts=db.recent_transcripts(c, 6))
+                greeting=greeting, task_groups=_task_groups(allopen), open_count=len(allopen),
+                review=_review_nudges(c), unknowns=unknowns, samples=samples,
+                enrolled=db.enrolled_speakers(c), transcripts=db.recent_transcripts(c, 6))
+
+
+@app.post("/tasks/add")
+def add_task(action: str = Form("")):
+    a = action.strip()
+    if a:
+        c = db.connect()
+        sp = db.get_self(c)
+        c.execute("INSERT INTO intents(speaker_id, action, kind, tier, status) "
+                  "VALUES (?, ?, 'task', 'SOON', 'pending')", (sp["id"] if sp else None, a))
+        c.commit()
+        try:                                  # push to Google Tasks if connected
+            google_sync.sync_pending(c)
+        except Exception:  # noqa: BLE001
+            pass
+    return RedirectResponse("/", status_code=303)
 
 
 @app.get("/speakers", response_class=HTMLResponse)

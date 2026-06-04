@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">Settings</h1>
+<p class="sub">Local services powering this dashboard.</p>
+
+<div class="card">
+  <h2>Assistant · MCP server</h2>
+  <div class="row" style="border:none;padding-top:0">
+    <div class="av" style="--hue:265">✨</div>
+    <div class="grow">
+      <div class="name">Status:
+        {% if mcp_running %}<span class="chip good">running</span>
+        {% else %}<span class="chip unk">stopped</span>{% endif %}
+      </div>
+      <div class="muted">Model <b>{{ model }}</b> · tools served over MCP on 127.0.0.1:8765</div>
+    </div>
+  </div>
+  <div class="field" style="margin-top:12px">
+    <form method="post" action="/settings/mcp/restart"><button class="btn">Restart</button></form>
+    <form method="post" action="/settings/mcp/start"><button class="btn ghost">Start</button></form>
+    <form method="post" action="/settings/mcp/stop"><button class="btn ghost">Stop</button></form>
+  </div>
+  <p class="muted" style="margin:.8em 0 0">If the assistant stops responding (e.g. after a
+  WSL hiccup while you're away), Restart here brings the tool server back.</p>
+</div>
+
+<div class="card">
+  <h2>Privacy</h2>
+  <p class="muted" style="margin:0">All audio, transcripts, voiceprints, and the assistant
+  run <b>locally</b> on this machine. The dashboard is reachable only over your Tailscale
+  network — never the public internet.</p>
+</div>
+{% endblock %}

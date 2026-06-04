@@ -111,6 +111,15 @@ Open **http://localhost:8000** (WSL forwards to Windows). Pages: home, `/speaker
 `/segment/{id}/audio.wav` slices audio on demand (404 after the 30-day purge).
 `POST /ingest` verifies `X-Sig` HMAC-SHA256(secret, ts+body) + 5-min replay window.
 
+## Page assistant — MCP + Ollama, streamed (ADR-020)
+A real **MCP server** (`mcp_server.py`, FastMCP streamable-HTTP on :8765) exposes
+the dashboard tools (`assistant_tools.py`: list/rename/merge speakers, list/dismiss
+tasks, read transcripts). The app launches + restarts it (Settings page). The
+assistant (`assistant.py`) connects to it **as an MCP client**, runs an Ollama
+tool-calling agent loop, and **streams** tokens + tool-call events over SSE
+(`GET /assistant/stream?q=…`). The mobile UI has a ✨ FAB → collapsible chat that
+renders the stream. Model: **qwen3:8b** (qwen3:4b loops on multi-tool flows). All local.
+
 **Remote (phone) access — Tailscale Serve (tailnet-only, no public exposure):**
 ```bash
 tailscale serve --bg 8000      # → https://<machine>.<tailnet>.ts.net

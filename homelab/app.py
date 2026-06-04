@@ -7,20 +7,23 @@ exposed publicly (Tailscale Funnel), HMAC + replay-window locked.
     cd /mnt/c/Listener/homelab
     ~/listener-web/bin/uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 """
+import contextlib
 import hashlib
 import hmac
 import html
 import os
 import subprocess
+import sys
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Form, Header, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+import assistant
 import db
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -28,7 +31,37 @@ CHUNK_DIR = os.path.join(HERE, "data", "chunks")
 os.makedirs(CHUNK_DIR, exist_ok=True)
 INGEST_SECRET = os.environ.get("LISTENER_INGEST_SECRET", "dev-secret-change-me")
 
-app = FastAPI(title="Listener")
+class MCPManager:
+    """Owns the dedicated MCP server subprocess (ADR-020). Singleton via pkill."""
+
+    def __init__(self):
+        self.proc = None
+
+    def running(self):
+        return self.proc is not None and self.proc.poll() is None
+
+    def start(self):
+        subprocess.run(["pkill", "-f", "[m]cp_server.py"])
+        self.proc = subprocess.Popen(
+            [sys.executable, os.path.join(HERE, "mcp_server.py")], cwd=HERE,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def stop(self):
+        subprocess.run(["pkill", "-f", "[m]cp_server.py"])
+        self.proc = None
+
+
+mcp_mgr = MCPManager()
+
+
+@contextlib.asynccontextmanager
+async def lifespan(_app):
+    mcp_mgr.start()       # bring the MCP server up with the dashboard
+    yield
+    mcp_mgr.stop()
+
+
+app = FastAPI(title="Listener", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
 tpl = Jinja2Templates(directory=os.path.join(HERE, "templates"))
 
@@ -156,6 +189,29 @@ def dismiss(request: Request, iid: int):
     if _hx(request):
         return HTMLResponse("")  # HTMX removes the row
     return RedirectResponse("/tasks", status_code=303)
+
+
+@app.get("/assistant/stream")
+async def assistant_stream(q: str):
+    """SSE stream of the page assistant (tokens + tool-call events)."""
+    return StreamingResponse(
+        assistant.run(q), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings(request: Request):
+    return page("settings.html", request, active="settings",
+                mcp_running=mcp_mgr.running(), model=assistant.MODEL)
+
+
+@app.post("/settings/mcp/{action}")
+def mcp_control(request: Request, action: str):
+    if action in ("start", "restart"):
+        mcp_mgr.start()
+    elif action == "stop":
+        mcp_mgr.stop()
+    return RedirectResponse("/settings", status_code=303)
 
 
 @app.get("/segment/{seg_id}/audio.wav")

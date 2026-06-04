@@ -7,3 +7,4 @@ jinja2
 python-multipart
 httpx
 dateparser   # H4: resolve relative due times → UTC (ADR-017)
+mcp          # page assistant: MCP server + client (ADR-020)

@@ -79,16 +79,41 @@ def conversation_for(tid):
     return "\n".join(f"{r['who']}: {r['text']}" for r in rows)
 
 
+def _get_or_create_speaker(cur, name):
+    r = cur.execute("SELECT id FROM speakers WHERE name=?", (name,)).fetchone()
+    if r:
+        return r["id"]
+    cur.execute("INSERT INTO speakers(name, status) VALUES (?, 'enrolled')", (name,))
+    return cur.lastrowid
+
+
+def seed_demo(conn):
+    """Persist the demo conversation as a real transcript + speakers + segments."""
+    cur = conn.cursor()
+    ids = {nm: _get_or_create_speaker(cur, nm) for nm in ("Sarah", "Jon")}
+    cur.execute("INSERT INTO transcripts(audio_path, lang) VALUES ('(demo conversation)', 'en')")
+    tid = cur.lastrowid
+    t = 0.0
+    for line in DEMO.strip().splitlines():
+        who, _, text = line.partition(": ")
+        cur.execute("INSERT INTO segments(transcript_id, speaker_id, t_start, t_end, text)"
+                    " VALUES (?,?,?,?,?)", (tid, ids.get(who), t, t + 4, text))
+        t += 4
+    conn.commit()
+    return tid
+
+
 def main():
     demo = "--demo" in sys.argv
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
 
+    conn = db.connect()
     if demo:
-        convo, tid = DEMO, None
+        tid = seed_demo(conn)
     else:
-        tid = int(args[0]) if args else db.connect().execute(
+        tid = int(args[0]) if args else conn.execute(
             "SELECT MAX(id) FROM transcripts").fetchone()[0]
-        convo = conversation_for(tid)
+    convo = conversation_for(tid)
 
     now_local = datetime.now(TZ)
     system = SYSTEM % {"now": now_local.strftime("%Y-%m-%d %H:%M (%A)"), "tz": TZ_NAME}
@@ -99,7 +124,6 @@ def main():
     data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
     intents = data.get("intents", [])
 
-    conn = db.connect()
     print(f"\n=== {len(intents)} intent(s) ===")
     for it in intents:
         due = to_utc(it.get("due_local"), it.get("due_text"), now_local)
@@ -108,16 +132,14 @@ def main():
         print(f"  [{it.get('tier')}] {it.get('action')}")
         print(f"        speaker={it.get('speaker')}  due={due_str}  (local {local_str})")
         print(f"        quote: \"{it.get('source_quote')}\"")
-        if not demo:
-            sp = conn.execute("SELECT id FROM speakers WHERE name=?", (it.get("speaker"),)).fetchone()
-            conn.execute(
-                "INSERT INTO intents(speaker_id, action, tier, due_at, status, source_quote)"
-                " VALUES (?,?,?,?, 'pending', ?)",
-                (sp["id"] if sp else None, it.get("action"), it.get("tier"),
-                 due.isoformat() if due else None, it.get("source_quote")))
-    if not demo:
-        conn.commit()
-        print(f"\nstored {len(intents)} intent(s) for transcript #{tid} -> listener.db")
+        sp = conn.execute("SELECT id FROM speakers WHERE name=?", (it.get("speaker"),)).fetchone()
+        conn.execute(
+            "INSERT INTO intents(speaker_id, action, tier, due_at, status, source_quote)"
+            " VALUES (?,?,?,?, 'pending', ?)",
+            (sp["id"] if sp else None, it.get("action"), it.get("tier"),
+             due.isoformat() if due else None, it.get("source_quote")))
+    conn.commit()
+    print(f"\nstored {len(intents)} intent(s) for transcript #{tid} -> listener.db")
 
 
 if __name__ == "__main__":

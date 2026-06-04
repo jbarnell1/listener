@@ -13,6 +13,8 @@ import html
 import os
 import subprocess
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Form, Header, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -45,8 +47,24 @@ def _hue(sid):
         return 212
 
 
+_CT = ZoneInfo("America/Chicago")
+_UTC = ZoneInfo("UTC")
+
+
+def _localtime(iso):
+    if not iso:
+        return "no time"
+    try:
+        dt = datetime.fromisoformat(iso)
+        dt = dt.replace(tzinfo=_UTC) if dt.tzinfo is None else dt
+        return dt.astimezone(_CT).strftime("%a %b %-d · %-I:%M %p")
+    except ValueError:
+        return iso
+
+
 tpl.env.filters["initials"] = _initials
 tpl.env.filters["hue"] = _hue
+tpl.env.filters["localtime"] = _localtime
 
 
 def page(name, request, **ctx):
@@ -78,7 +96,7 @@ def speaker(request: Request, sid: int):
     if not sp:
         raise HTTPException(404)
     return page("speaker.html", request, active="speakers", sp=sp,
-                segments=db.speaker_segments(c, sid))
+                tasks=db.speaker_intents(c, sid), segments=db.speaker_segments(c, sid))
 
 
 @app.post("/speakers/{sid}/name")
@@ -123,6 +141,21 @@ def unknown(request: Request):
     samples = {r["id"]: db.speaker_segments(c, r["id"], limit=3) for r in rows}
     return page("unknown.html", request, active="unknown", unknowns=rows,
                 samples=samples, enrolled=db.enrolled_speakers(c))
+
+
+@app.get("/tasks", response_class=HTMLResponse)
+def tasks(request: Request):
+    c = db.connect()
+    return page("tasks.html", request, active="tasks",
+                soon=db.list_intents(c, "SOON"), later=db.list_intents(c, "LATER"))
+
+
+@app.post("/tasks/{iid}/dismiss")
+def dismiss(request: Request, iid: int):
+    db.dismiss_intent(db.connect(), iid)
+    if _hx(request):
+        return HTMLResponse("")  # HTMX removes the row
+    return RedirectResponse("/tasks", status_code=303)
 
 
 @app.get("/segment/{seg_id}/audio.wav")

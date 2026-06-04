@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">Tasks</h1>
+<p class="sub">Pulled from your conversations. <b>Soon</b> = today / time-sensitive ·
+<b>Later</b> = upcoming or informational.</p>
+
+<div class="card">
+  <h2>⚡ Soon</h2>
+  {% for i in soon %}{% include "_task.html" %}
+  {% else %}<div class="empty">Nothing time-sensitive</div>{% endfor %}
+</div>
+
+<div class="card">
+  <h2>📅 Later</h2>
+  {% for i in later %}{% include "_task.html" %}
+  {% else %}<div class="empty">Nothing upcoming</div>{% endfor %}
+</div>
+{% endblock %}

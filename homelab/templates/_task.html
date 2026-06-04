@@ -1,0 +1,14 @@
+<div class="row" id="task-{{ i.id }}" style="--hue:{{ i.speaker_id|hue }}">
+  <div class="av">{{ i.who|initials }}</div>
+  <div class="grow">
+    <div class="name">{{ i.action }}</div>
+    <div class="muted">
+      <a href="/speakers/{{ i.speaker_id }}">{{ i.who }}</a>
+      {% if i.due_at %} · <span class="due">{{ i.due_at|localtime }}</span>{% endif %}
+    </div>
+    {% if i.source_quote %}<div class="quote">"{{ i.source_quote }}"</div>{% endif %}
+  </div>
+  <span class="tier {{ 'soon' if i.tier == 'SOON' else 'later' }}">{{ i.tier }}</span>
+  <button class="x" title="Dismiss" hx-post="/tasks/{{ i.id }}/dismiss"
+          hx-target="#task-{{ i.id }}" hx-swap="outerHTML">✕</button>
+</div>

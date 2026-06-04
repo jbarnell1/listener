@@ -22,6 +22,12 @@
 </div>
 
 <div class="card">
+  <h2>Tasks</h2>
+  {% for i in tasks %}{% include "_task.html" %}
+  {% else %}<div class="empty">No open tasks</div>{% endfor %}
+</div>
+
+<div class="card">
   <h2>Recent segments</h2>
   {% for s in segments %}
     <div class="row">

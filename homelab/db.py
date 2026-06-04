@@ -157,6 +157,29 @@ def rename_speaker(conn, sid, name):
     conn.commit()
 
 
+def list_intents(conn, tier=None):
+    base = ("SELECT i.*, COALESCE(sp.name, 'Unknown_' || sp.id, '—') AS who "
+            "FROM intents i LEFT JOIN speakers sp ON sp.id = i.speaker_id "
+            "WHERE i.status != 'dismissed' ")
+    if tier:
+        return conn.execute(base + "AND i.tier=? ORDER BY i.due_at IS NULL, i.due_at",
+                            (tier,)).fetchall()
+    return conn.execute(base + "ORDER BY i.due_at IS NULL, i.due_at").fetchall()
+
+
+def speaker_intents(conn, sid):
+    return conn.execute(
+        "SELECT i.*, COALESCE(sp.name, 'Unknown_' || sp.id) AS who FROM intents i "
+        "LEFT JOIN speakers sp ON sp.id = i.speaker_id "
+        "WHERE i.speaker_id=? AND i.status!='dismissed' "
+        "ORDER BY i.due_at IS NULL, i.due_at", (sid,)).fetchall()
+
+
+def dismiss_intent(conn, iid):
+    conn.execute("UPDATE intents SET status='dismissed' WHERE id=?", (iid,))
+    conn.commit()
+
+
 def merge_speakers(conn, src_id, dst_id):
     """Merge src speaker into dst: weighted-average their centroids (so dst's
     voiceprint improves), reassign src's segments to dst, delete src. Pure stdlib."""

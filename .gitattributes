@@ -1,0 +1,4 @@
+# Shell scripts MUST stay LF — CRLF breaks the shebang (`bad interpreter`) in WSL.
+*.sh text eol=lf
+# Keep Python LF too (consistency across the WSL pipeline).
+*.py text eol=lf

@@ -148,6 +148,13 @@ tpl.env.filters["localtime"] = _localtime
 
 
 def page(name, request, **ctx):
+    if "new_count" not in ctx:                # activity badge on every page
+        try:
+            c = db.connect()
+            ctx["new_count"] = db.activity_count(
+                c, db.meta_get(c, "activity_seen_at", "1970-01-01"))
+        except Exception:  # noqa: BLE001
+            ctx["new_count"] = 0
     return tpl.TemplateResponse(request, name, ctx)
 
 
@@ -264,10 +271,21 @@ def tasks(request: Request):
 
 @app.post("/tasks/{iid}/dismiss")
 def dismiss(request: Request, iid: int):
-    db.dismiss_intent(db.connect(), iid)
+    c = db.connect()
+    google_sync.remove_intent(c, iid)        # also delete the Calendar event / Task
+    db.dismiss_intent(c, iid)
     if _hx(request):
         return HTMLResponse("")  # HTMX removes the row
     return RedirectResponse("/tasks", status_code=303)
+
+
+@app.get("/activity", response_class=HTMLResponse)
+def activity(request: Request):
+    c = db.connect()
+    since = db.meta_get(c, "activity_seen_at", "1970-01-01")
+    data = db.activity_since(c, since)
+    db.meta_set(c, "activity_seen_at", datetime.now(_UTC).strftime("%Y-%m-%d %H:%M:%S"))
+    return page("activity.html", request, active="activity", new_count=0, since=since, **data)
 
 
 @app.get("/assistant/stream")

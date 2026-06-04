@@ -77,13 +77,17 @@ CREATE TABLE IF NOT EXISTS intents (
   kind         TEXT,                                -- event | task | followup (ADR-026)
   status       TEXT NOT NULL DEFAULT 'pending',     -- pending|scheduled|sent|dismissed
   source_quote TEXT,
-  calendar_event_id TEXT, gtask_id TEXT, synced_at TEXT,   -- Google sync (ADR-026)
+  calendar_event_id TEXT, calendar_link TEXT, gtask_id TEXT, synced_at TEXT,  -- Google sync (ADR-026)
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT
 );
 """
 
 TABLES = ["speakers", "embeddings", "chunks", "transcripts",
-          "segments", "profiles", "intents"]
+          "segments", "profiles", "intents", "meta"]
 
 
 def connect(path: str = DB_PATH) -> sqlite3.Connection:
@@ -111,7 +115,7 @@ def _migrate(conn):
     if "error" not in ch:
         conn.execute("ALTER TABLE chunks ADD COLUMN error TEXT")
     it = cols("intents")
-    for col in ("kind", "calendar_event_id", "gtask_id", "synced_at"):
+    for col in ("kind", "calendar_event_id", "calendar_link", "gtask_id", "synced_at"):
         if col not in it:
             conn.execute(f"ALTER TABLE intents ADD COLUMN {col} TEXT")
     conn.commit()
@@ -225,13 +229,52 @@ def unsynced_intents(conn):
         "WHERE i.synced_at IS NULL AND i.status != 'dismissed' ORDER BY i.id").fetchall()
 
 
-def mark_intent_synced(conn, iid, calendar_event_id=None, gtask_id=None):
+def mark_intent_synced(conn, iid, calendar_event_id=None, calendar_link=None, gtask_id=None):
     conn.execute(
         "UPDATE intents SET synced_at=datetime('now'), "
         "calendar_event_id=COALESCE(?, calendar_event_id), "
+        "calendar_link=COALESCE(?, calendar_link), "
         "gtask_id=COALESCE(?, gtask_id) WHERE id=?",
-        (calendar_event_id, gtask_id, iid))
+        (calendar_event_id, calendar_link, gtask_id, iid))
     conn.commit()
+
+
+# --- key/value meta + activity feed (ADR-028: "what's new since last check") ---
+
+def meta_get(conn, key, default=None):
+    r = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+    return r["value"] if r else default
+
+
+def meta_set(conn, key, value):
+    conn.execute("INSERT INTO meta(key, value) VALUES(?, ?) "
+                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
+    conn.commit()
+
+
+def activity_count(conn, since):
+    """How many new conversations + action items since `since` (for the nav badge)."""
+    return conn.execute(
+        "SELECT (SELECT COUNT(*) FROM transcripts WHERE created_at > ?) + "
+        "       (SELECT COUNT(*) FROM intents WHERE created_at > ?)", (since, since)).fetchone()[0]
+
+
+def activity_since(conn, since):
+    transcripts = conn.execute(
+        "SELECT t.id, t.created_at, COUNT(s.id) AS n_segments, "
+        "(SELECT GROUP_CONCAT(DISTINCT COALESCE(sp.name, 'Unknown_' || sp.id)) "
+        " FROM segments s2 JOIN speakers sp ON sp.id = s2.speaker_id "
+        " WHERE s2.transcript_id = t.id) AS who "
+        "FROM transcripts t LEFT JOIN segments s ON s.transcript_id = t.id "
+        "WHERE t.created_at > ? GROUP BY t.id ORDER BY t.id DESC", (since,)).fetchall()
+    intents = conn.execute(
+        "SELECT i.*, COALESCE(sp.name, 'Unknown_' || sp.id) AS who FROM intents i "
+        "LEFT JOIN speakers sp ON sp.id = i.speaker_id "
+        "WHERE i.created_at > ? ORDER BY i.id DESC", (since,)).fetchall()
+    speakers = conn.execute(
+        "SELECT id, COALESCE(name, 'Unknown_' || id) AS label, status, created_at "
+        "FROM speakers WHERE created_at > ? ORDER BY id DESC", (since,)).fetchall()
+    return {"transcripts": transcripts, "intents": intents, "speakers": speakers}
 
 
 def merge_speakers(conn, src_id, dst_id):

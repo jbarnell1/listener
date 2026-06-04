@@ -107,7 +107,9 @@ cd /mnt/c/Listener/homelab
 ~/listener-web/bin/uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 Open **http://localhost:8000** (WSL forwards to Windows). Pages: home, `/speakers`,
-`/transcripts/{id}` (named segments), `/unknown` (snippet playback + name/tag).
+`/transcripts/{id}` (named segments), `/unknown` (snippet playback + name/tag),
+`/activity` (🔔 "what's new since last check" — ADR-028). The Tasks page shows where each
+item was routed (Calendar/Task/digest); dismissing one also deletes its Google item.
 `/segment/{id}/audio.wav` slices audio on demand (404 after the 30-day purge).
 `POST /ingest` verifies `X-Sig` HMAC-SHA256(secret, ts+body) + 5-min replay window.
 

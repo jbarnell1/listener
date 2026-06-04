@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">What's new</h1>
+<p class="sub">Everything since your last check{% if since and since != '1970-01-01' %} · {{ since|localtime }}{% endif %}.</p>
+
+{% if not transcripts and not intents and not speakers %}
+<div class="card"><div class="empty">All caught up — nothing new since last time. 🎧</div></div>
+{% endif %}
+
+{% if intents %}
+<div class="card">
+  <h2>Action items found ({{ intents|length }})</h2>
+  {% for i in intents %}
+  <div class="row" style="--hue:{{ i.speaker_id|hue }}">
+    <div class="av">{{ i.who|initials }}</div>
+    <div class="grow">
+      <div class="name">{{ i.action }}</div>
+      <div class="muted">{{ i.who }}{% if i.due_at %} · <span class="due">{{ i.due_at|localtime }}</span>{% endif %}</div>
+    </div>
+    {% if i.calendar_event_id %}<a class="chip good" href="{{ i.calendar_link }}" target="_blank" rel="noopener">📅 Calendar ↗</a>
+    {% elif i.gtask_id %}<span class="chip good">✅ Task</span>
+    {% elif i.kind == 'followup' %}<span class="chip">✉️ Digest</span>
+    {% else %}<span class="chip unk">pending</span>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if transcripts %}
+<div class="card">
+  <h2>Conversations processed ({{ transcripts|length }})</h2>
+  {% for t in transcripts %}
+  <a class="row" href="/transcripts/{{ t.id }}">
+    <div class="grow">
+      <div class="name">{{ t.who or 'Transcript #' ~ t.id }}</div>
+      <div class="muted">{{ t.n_segments }} segments · {{ t.created_at|localtime }}</div>
+    </div>
+    <span class="chevron">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if speakers %}
+<div class="card">
+  <h2>New people ({{ speakers|length }})</h2>
+  {% for s in speakers %}
+  <a class="row" href="/speakers/{{ s.id }}" style="--hue:{{ s.id|hue }}">
+    <div class="av">{{ s.label|initials }}</div>
+    <div class="grow"><div class="name">{{ s.label }}</div>
+      <div class="muted">first heard {{ s.created_at|localtime }}</div></div>
+    <span class="chevron">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

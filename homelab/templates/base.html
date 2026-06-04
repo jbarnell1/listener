@@ -23,6 +23,10 @@ a{color:var(--accent);text-decoration:none}
 header.top{position:sticky;top:0;z-index:20;backdrop-filter:blur(14px);
   background:rgba(10,12,16,.72);border-bottom:1px solid var(--border)}
 header.top .wrap{display:flex;align-items:center;height:54px}
+.bell{margin-left:auto;position:relative;font-size:1.3rem;line-height:1;text-decoration:none}
+.bell .badge{position:absolute;top:-7px;right:-9px;background:var(--accent2);color:#0a0c10;
+  font-size:.6rem;font-weight:800;min-width:16px;height:16px;border-radius:999px;
+  display:flex;align-items:center;justify-content:center;padding:0 4px}
 .brand{font-weight:800;font-size:1.16rem;letter-spacing:-.02em;
   background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;
   background-clip:text;color:transparent}
@@ -115,7 +119,9 @@ nav.bottom a.active{color:var(--accent)}
 </style>
 </head>
 <body>
-<header class="top"><div class="wrap"><span class="brand">🎧 Listener</span></div></header>
+<header class="top"><div class="wrap"><span class="brand">🎧 Listener</span>
+  <a href="/activity" class="bell" aria-label="What's new">🔔{% if new_count %}<span class="badge">{{ new_count if new_count < 100 else '99+' }}</span>{% endif %}</a>
+</div></header>
 <main><div class="wrap">{% block body %}{% endblock %}</div></main>
 
 <nav class="bottom">

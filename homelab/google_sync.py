@@ -95,8 +95,38 @@ def create_event(creds, summary, due_utc_iso, description=""):
         "reminders": {"useDefault": False,
                       "overrides": [{"method": "popup", "minutes": REMIND_MIN}]},
     }
-    return _svc("calendar", "v3", creds).events().insert(
-        calendarId="primary", body=body).execute()["id"]
+    ev = _svc("calendar", "v3", creds).events().insert(calendarId="primary", body=body).execute()
+    return ev["id"], ev.get("htmlLink")
+
+
+def delete_event(creds, event_id):
+    _svc("calendar", "v3", creds).events().delete(
+        calendarId="primary", eventId=event_id).execute()
+
+
+def delete_task(creds, task_id):
+    _svc("tasks", "v1", creds).tasks().delete(tasklist="@default", task=task_id).execute()
+
+
+def remove_intent(conn, intent_id):
+    """Delete the Google item(s) backing an intent (called when the user dismisses
+    it). Safe no-op if not connected or already gone."""
+    creds = get_credentials()
+    if not creds:
+        return False
+    r = conn.execute("SELECT calendar_event_id, gtask_id FROM intents WHERE id=?",
+                     (intent_id,)).fetchone()
+    if not r:
+        return False
+    try:
+        if r["calendar_event_id"]:
+            delete_event(creds, r["calendar_event_id"])
+        if r["gtask_id"]:
+            delete_task(creds, r["gtask_id"])
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"google: delete failed for intent {intent_id}: {e}")
+        return False
 
 
 def create_task(creds, title, due_utc_iso=None, notes=""):
@@ -124,9 +154,8 @@ def sync_pending(conn, verbose=False):
         desc = f'Listener · {it["who"]}: "{it["source_quote"] or ""}"'
         try:
             if kind == "event" and it["due_at"]:
-                db.mark_intent_synced(conn, it["id"],
-                                      calendar_event_id=create_event(creds, it["action"],
-                                                                     it["due_at"], desc))
+                eid, link = create_event(creds, it["action"], it["due_at"], desc)
+                db.mark_intent_synced(conn, it["id"], calendar_event_id=eid, calendar_link=link)
             elif kind == "followup":
                 db.mark_intent_synced(conn, it["id"])          # digest-only
                 continue

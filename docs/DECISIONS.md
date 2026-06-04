@@ -5,6 +5,17 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-028 — Dashboard: activity feed + manage pipeline-created Google items
+**2026-06-04.** Two dashboard additions. (1) **Activity feed** (`/activity`, header 🔔
+badge) — "what's new since you last checked": conversations processed, action items found
+(with where each was routed — Calendar / Task / digest), and newly heard people. A `meta`
+key/value table holds `activity_seen_at`; the badge counts new transcripts + intents since
+then and resets on view. (2) **Manage synced items** — each intent records its
+`calendar_event_id` / `calendar_link` / `gtask_id`, so the Tasks page shows where it landed
+and links to the Calendar event; **dismissing a task also deletes its Google event/task**
+(`google_sync.remove_intent`) — one place to catch and remove a wrong entry. Editing is via
+the Google link (Calendar's own UI), not re-implemented here.
+
 ### ADR-027 — Drop Tasker & Flutter; notifications via Google + email
 **2026-06-04.** No phone-side notification app. Reminders are delivered by **Google
 Calendar/Tasks** (ADR-026) and the nightly **email digest** (ADR-024) — both already
@@ -270,10 +281,11 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
 - *Resolved:* Q-S4 → ADR-021 (audio 30 days, transcripts/embeddings/profiles indefinite).
 - *Resolved:* Q-S5 → ADR-023 (`do_not_profile` opt-out + per-person privacy delete;
   profiles stay local per ADR-016; embedding/transcript retention per ADR-021).
-- **Q-S6: Speaker-match threshold** — cosine sim to call a voice "the same person"
-  (~0.7–0.8) + min samples/turn-length before enrolling/auto-naming a cluster.
-- **Q-S7: pyannote model access** — gated HuggingFace models; need an HF account +
-  accept the model terms to download (one-time setup).
+- **Q-S6: Speaker-match threshold** — working default **0.40** (ECAPA cosine; same
+  speaker ≈0.5+, different <0.3). Leave as-is; finalize against real multi-speaker
+  field audio once the device is feeding live conversations.
+- *Resolved:* Q-S7 → HF account + `pyannote/speaker-diarization-community-1` terms
+  accepted, HF token configured (`hf auth login`). One-time setup complete.
 
 ### Firmware (block before Phase 3)
 - *Resolved:* Q-F1 → ADR-013 (Arduino / arduino-esp32 v3.x).

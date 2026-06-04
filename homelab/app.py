@@ -25,6 +25,9 @@ from fastapi.templating import Jinja2Templates
 
 import assistant
 import db
+import mailer
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CHUNK_DIR = os.path.join(HERE, "data", "chunks")
@@ -52,13 +55,20 @@ class MCPManager:
 
 
 mcp_mgr = MCPManager()
+scheduler = AsyncIOScheduler(timezone=ZoneInfo("America/Chicago"))
+BRIEF_HOUR, BRIEF_MIN = 23, 50   # 11:50 PM local — lands before midnight (ADR-024)
 
 
 @contextlib.asynccontextmanager
 async def lifespan(_app):
     db.init_db()          # ensure schema + run idempotent migrations
     mcp_mgr.start()       # bring the MCP server up with the dashboard
+    scheduler.add_job(mailer.send_daily_brief,
+                      CronTrigger(hour=BRIEF_HOUR, minute=BRIEF_MIN),
+                      id="daily_brief", replace_existing=True, misfire_grace_time=3600)
+    scheduler.start()     # nightly email brief
     yield
+    scheduler.shutdown(wait=False)
     mcp_mgr.stop()
 
 
@@ -219,7 +229,11 @@ async def assistant_stream(q: str):
 @app.get("/settings", response_class=HTMLResponse)
 def settings(request: Request):
     return page("settings.html", request, active="settings",
-                mcp_running=mcp_mgr.running(), model=assistant.MODEL)
+                mcp_running=mcp_mgr.running(), model=assistant.MODEL,
+                mail_configured=mailer.configured(),
+                mail_to=(os.environ.get("LISTENER_MAIL_TO")
+                         or os.environ.get("LISTENER_SMTP_USER") or "—"),
+                brief_time=f"{BRIEF_HOUR % 12 or 12}:{BRIEF_MIN:02d} PM")
 
 
 @app.post("/settings/mcp/{action}")
@@ -228,6 +242,12 @@ def mcp_control(request: Request, action: str):
         mcp_mgr.start()
     elif action == "stop":
         mcp_mgr.stop()
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/settings/mail/test")
+def mail_test():
+    mailer.send("Listener test ✅", "If you're reading this, email delivery works. 🎧")
     return RedirectResponse("/settings", status_code=303)
 
 

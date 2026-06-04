@@ -13,6 +13,8 @@ _kill(){ pkill -f '[u]vicorn app:app' 2>/dev/null; pkill -f '[m]cp_server.py' 2>
 up(){
   _kill; sleep 0.5
   cd "$APP" || { echo "listener: can't cd $APP"; return 1; }
+  # load private creds (Gmail app password, etc.) into the app's environment
+  [ -f "$HOME/.listener.env" ] && { set -a; . "$HOME/.listener.env"; set +a; }
   setsid "$WEB/uvicorn" app:app --host 0.0.0.0 --port 8000 >"$LOG" 2>&1 </dev/null &
   disown 2>/dev/null || true
   printf 'listener: starting'

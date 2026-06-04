@@ -25,6 +25,30 @@
 </div>
 
 <div class="card">
+  <h2>Email · nightly brief</h2>
+  <div class="row" style="border:none;padding-top:0">
+    <div class="av" style="--hue:150">✉️</div>
+    <div class="grow">
+      <div class="name">Status:
+        {% if mail_configured %}<span class="chip good">configured</span>
+        {% else %}<span class="chip unk">not set up</span>{% endif %}
+      </div>
+      <div class="muted">
+        {% if mail_configured %}Sends to <b>{{ mail_to }}</b> nightly at <b>{{ brief_time }}</b>
+        {% else %}Add Gmail credentials to <code>~/.listener.env</code>, then restart{% endif %}
+      </div>
+    </div>
+  </div>
+  {% if mail_configured %}
+  <div class="field" style="margin-top:12px">
+    <form method="post" action="/settings/mail/test"><button class="btn">Send test email</button></form>
+  </div>
+  {% endif %}
+  <p class="muted" style="margin:.8em 0 0">The brief lands before midnight so the next
+  morning's Google Daily Brief picks it up. Credentials live only in WSL — never committed.</p>
+</div>
+
+<div class="card">
   <h2>Privacy</h2>
   <p class="muted" style="margin:0">All audio, transcripts, voiceprints, and the assistant
   run <b>locally</b> on this machine. The dashboard is reachable only over your Tailscale

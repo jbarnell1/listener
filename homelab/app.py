@@ -38,6 +38,15 @@ CHUNK_DIR = os.path.join(HERE, "data", "chunks")
 os.makedirs(CHUNK_DIR, exist_ok=True)
 INGEST_SECRET = os.environ.get("LISTENER_INGEST_SECRET", "dev-secret-change-me")
 
+def _wait_gone(pattern, tries=60):
+    """Block until no process matches `pattern` (so a restart doesn't race the old
+    process for its port). ~6s max."""
+    for _ in range(tries):
+        if subprocess.run(["pgrep", "-f", pattern], capture_output=True).returncode != 0:
+            return
+        time.sleep(0.1)
+
+
 class MCPManager:
     """Owns the dedicated MCP server subprocess (ADR-020). Singleton via pkill."""
 
@@ -49,9 +58,11 @@ class MCPManager:
 
     def start(self):
         subprocess.run(["pkill", "-f", "[m]cp_server.py"])
+        _wait_gone("[m]cp_server.py")          # let port 8765 free before rebinding
+        logf = open(os.path.join("/tmp", "listener-mcp.log"), "a")  # visible on crash
         self.proc = subprocess.Popen(
             [sys.executable, os.path.join(HERE, "mcp_server.py")], cwd=HERE,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            stdout=logf, stderr=logf)
 
     def stop(self):
         subprocess.run(["pkill", "-f", "[m]cp_server.py"])
@@ -69,6 +80,7 @@ class WorkerManager:
 
     def start(self):
         subprocess.run(["pkill", "-f", "[w]orker.py"])
+        _wait_gone("[w]orker.py")              # avoid two workers grabbing one chunk
         self.proc = subprocess.Popen(
             [sys.executable, os.path.join(HERE, "worker.py")], cwd=HERE)
 

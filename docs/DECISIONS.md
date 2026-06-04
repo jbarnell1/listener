@@ -5,6 +5,22 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-026 — Intent routing: Google Calendar/Tasks for reminders, email = digest
+**2026-06-04.** Time-based reminders move to **Google** (Calendar + Tasks) instead of
+us emailing at a set time: Google fires the reminder across all devices, the homelab
+needn't be awake at reminder time, and Gemini's daily review reads Calendar + Tasks
+natively. The LLM tags each intent `kind`; **semantic routing** (`google_sync.py`):
+`event`→**Calendar event** (exact time + popup reminder), `task`→**Google Task** (date
+due — the Tasks API discards time-of-day), `followup`→**email digest** only. Every dated
+item also appears as a heads-up in the nightly digest; per-action timed emails are
+**dropped** (complements ADR-024, whose nightly brief becomes digest-only). Auth is
+**OAuth 2.0** (Calendar+Tasks scopes) with a stored refresh token — the Gmail App
+Password (ADR-024) is **SMTP-only** and does NOT reach these APIs; consumer Gmail can't
+use a service account for Tasks, so it's user-OAuth (consent screen must be **Published**
+or the refresh token dies in 7 days). Intents carry `calendar_event_id`/`gtask_id`/
+`synced_at` so re-processing never double-books; the worker pushes after profiling and
+no-ops safely until connected.
+
 ### ADR-025 — End-to-end pipeline worker + GPU gate
 **2026-06-04.** `/ingest` is a **queue handoff**, not synchronous processing: it
 stores the chunk (`transcribed=0`) and ACKs instantly, and a background **worker**

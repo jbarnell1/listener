@@ -85,12 +85,12 @@ phase docs implement it.
 
 ### Timeliness = scheduling, not connectivity
 - LLM extracts structured intent `{action, due_time, tier}`.
-- **Tier SOON** → APScheduler one-off job fires the email/notification at the
-  right time (e.g., "trash tonight" → 7 PM), surviving reboots via SQLite job
-  store.
-- **Tier LATER** → folded into the nightly **daily brief** email (23:50 local, so
-  the next-morning Google Daily Brief captures it; see ADR-024).
-- This decouples low-latency delivery from always-on connectivity.
+- **Dated reminders** → pushed to **Google Calendar (events) / Tasks (to-dos)** so
+  Google fires the reminder at the right time across devices, even if the homelab is
+  asleep; Gemini reads them natively (see ADR-026).
+- **Undated follow-ups** → the nightly **daily brief** email (23:50 local, captured by
+  the next-morning Google Daily Brief; ADR-024). Dated items also appear as a heads-up.
+- This decouples reminder delivery from our box being awake at reminder time.
 
 ### Phone: minimal now, extensible later
 - ESP32 **captive-portal** for WiFi/hotspot/token provisioning (no app).

@@ -147,6 +147,17 @@ python ingest_send.py samples/two.wav    # sign + POST a WAV like the device wil
 python worker.py --once samples/two.wav  # or process one file directly
 ```
 
+## Google Calendar + Tasks — reminders via Google, not timed emails (ADR-026)
+The worker routes each extracted intent by `kind`: **events** → a Google **Calendar**
+event (exact time + popup reminder), **to-dos** → a Google **Task** (date due — the
+Tasks API discards time-of-day), **undated follow-ups** → the nightly email digest.
+Google fires the reminders (and Gemini reads them), so the homelab needn't be awake at
+reminder time. Auth is **OAuth**, not the SMTP app password:
+1. GCP project → enable **Google Calendar API** + **Google Tasks API**.
+2. OAuth consent screen → External, **Published** (Testing-mode tokens expire in 7 days).
+3. Create an OAuth **Desktop** client → download JSON to `~/.listener-gcp/client_secret.json`.
+4. `python google_sync.py --auth` (open the printed URL, authorize), then `--status`.
+
 **Remote (phone) access — Tailscale Serve (tailnet-only, no public exposure):**
 ```bash
 tailscale serve --bg 8000      # → https://<machine>.<tailnet>.ts.net

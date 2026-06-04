@@ -152,6 +152,14 @@ python ingest_send.py samples/two.wav    # sign + POST a WAV like the device wil
 python worker.py --once samples/two.wav  # or process one file directly
 ```
 
+## Topics — multi-label tags across conversations (ADR-029)
+Each transcript gets **multiple topic tags** (`tagger.py`, one local-LLM pass per
+snippet — reuse existing topics or coin new ones), and each topic keeps a **running
+summary** that compounds. Browse `/topics` → `/topics/{tag}` (summary + every snippet
+over time); add/remove tags on a transcript; rename or **merge** topics. The assistant
+answers "what did we decide about X" via MCP `list_tags` + `get_topic`. Backfill:
+`python tagger.py --backfill`.
+
 ## Google Calendar + Tasks — reminders via Google, not timed emails (ADR-026)
 The worker routes each extracted intent by `kind`: **events** → a Google **Calendar**
 event (exact time + popup reminder), **to-dos** → a Google **Task** (date due — the

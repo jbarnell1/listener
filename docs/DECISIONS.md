@@ -5,6 +5,22 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-029 — Conversations organized by multi-label topic tags
+**2026-06-04.** Conversations are inherently multi-subject and arrive as snippets
+through the day, so rather than threading snippets into single-topic "conversations,"
+each transcript gets **multiple topic tags** (`tags` + `transcript_tags`) — the same
+snippet can live under several topics ("house hunting" AND "in-law troubles"). A
+local-LLM pass (`tagger.py`, one call per snippet) assigns tags (reusing existing
+topics or coining new ones) and returns each topic's updated **running summary**,
+which compounds like profiles (ADR-023). The dashboard browses by topic (`/topics`,
+`/topics/{tag}` = summary + every snippet over time); snippets show tag chips with
+inline add/remove; topics can be renamed or **merged** (the "join" op — re-tagging a
+snippet is the "split"). The assistant queries it via MCP (`list_tags` + `get_topic`)
+to answer "what did we decide about <subject>". Chosen over single-topic threading
+(closer to how talk actually flows) and over within-snippet topic-splitting (deferred:
+snippets are short/VAD-gated and usually single-subject; manual re-tagging covers the
+rare mixed one).
+
 ### ADR-028 — Dashboard: activity feed + manage pipeline-created Google items
 **2026-06-04.** Two dashboard additions. (1) **Activity feed** (`/activity`, header 🔔
 badge) — "what's new since you last checked": conversations processed, action items found

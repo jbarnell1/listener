@@ -46,7 +46,9 @@ embeddings(id, speaker_id, vec BLOB, source_chunk, created_at) -- ECAPA 192-d; c
 profiles(speaker_id, summary, emotion_trend(=transient mood), traits_json, interests_json,
          dislikes_json, dates_json, notable_json, last_seen, interaction_count, updated_at)
                   -- personality/relational profile, ADR-023 (durable fields + transient mood)
-intents(id, segment_id, speaker_id, action, tier, due_at, status, source_quote)
+intents(id, segment_id, speaker_id, action, kind, tier, due_at, status, source_quote,
+        calendar_event_id, calendar_link, gtask_id, synced_at)  -- kind/Google sync ADR-026
+tags(id, name, summary, ...)  +  transcript_tags(transcript_id, tag_id)  -- topics, ADR-029
 schedule_jobs(...)   -- APScheduler's own job store table
 ```
 `tier ∈ {SOON, LATER}`. `status ∈ {pending, scheduled, sent, dismissed}`.

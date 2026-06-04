@@ -44,7 +44,7 @@ speakers(id, name, relationship, status, do_not_profile, created_at, updated_at)
                                   -- status ∈ {enrolled, unknown}; name null until labeled
 embeddings(id, speaker_id, vec BLOB, source_chunk, created_at) -- ECAPA 192-d; centroid+samples
 profiles(speaker_id, summary, emotion_trend, topics_json, recurring_json,
-         last_seen, interaction_count, updated_at)             -- relational profile
+         facts_json, last_seen, interaction_count, updated_at) -- relational profile (ADR-023)
 intents(id, segment_id, speaker_id, action, tier, due_at, status, source_quote)
 schedule_jobs(...)   -- APScheduler's own job store table
 ```
@@ -59,7 +59,9 @@ schedule_jobs(...)   -- APScheduler's own job store table
 4. **Dashboard:** unknown clusters show with sample snippets → you label once
    ("Unknown B = Sarah, wife") → cluster becomes that enrolled speaker; future
    audio auto-tags by name.
-5. A `do_not_profile` flag stops building a profile for a given person (Q-S5).
+5. A `do_not_profile` flag stops building a profile for a given person; a per-person
+   privacy delete removes everything tied to them (see ADR-023). Profiles are
+   continuously LLM-enriched per transcript (`profile.py`).
 
 ## Intent schema (LLM output contract)
 ```json
@@ -87,8 +89,9 @@ schedule_jobs(...)   -- APScheduler's own job store table
 - Immediate emails: terse subject with a stable tag (e.g. `[ACTION] trash 7PM`),
   body with the single action + source quote + time, to maximize Workspace/Gemini
   pickup accuracy.
-- Daily "Day Ahead" (6 AM): grouped sections (Today, Upcoming, Context notes).
-- Exact tagging scheme + transport: **Q-S2**.
+- Nightly **daily brief** (23:50 local): grouped sections (Soon, Coming up); text +
+  HTML. Timed before midnight so the next-morning Google Daily Brief captures it.
+- Transport = local SMTP + Gmail App Password (see ADR-024); `mailer.py`.
 
 ## Build-up milestones (all testable WITHOUT hardware — feed a recorded WAV)
 | # | Milestone |
@@ -99,7 +102,7 @@ schedule_jobs(...)   -- APScheduler's own job store table
 | **H3.5** | **pyannote diarization** → speaker-attributed `segments` |
 | **H3.6** | **ECAPA embeddings + ID/cluster** → `speakers`/`embeddings`; profiles |
 | H4 | **Speaker-aware** LLM intent split → `intents` (+ profile_updates) |
-| H5 | APScheduler → timed email (e.g. 7 PM) + daily 6 AM summary (Gmail/SMTP) |
+| H5 | APScheduler → nightly 23:50 daily brief over SMTP (ADR-024); per-action timed email next |
 | H6 | PWA dashboard — label unknown clusters, review profiles, conversational editor |
 - H1→H5 prove the whole transcribe→diarize→ID→split→schedule→email flow before any
   board arrives (all testable with a recorded WAV).

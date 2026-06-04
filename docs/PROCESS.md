@@ -33,8 +33,9 @@ ordered at JLCPCB**; LCSC + Amazon parts ordered. ~2 week lead time. See
 - **Speaker diarization + ID + relational profiling** (pyannote + ECAPA) — core,
   ADR-014: every transcript speaker-attributed; auto-cluster + dashboard labeling
 - Speaker-aware LLM intent split: SOON vs LATER → structured rows in SQLite
-- APScheduler dispatch (timed emails) + daily "Day Ahead" summary
-- Speaker/profile store + conversational edit agent + PWA review dashboard
+- APScheduler dispatch (timed emails) + nightly daily-brief email (ADR-024)
+- Speaker/profile store (continuously LLM-enriched, ADR-023) + conversational MCP
+  assistant (ADR-020) + PWA review dashboard
 - Milestones H1–H6 in `homelab/PIPELINE.md` (all testable with a recorded WAV)
 - **Done when:** a speaker-attributed utterance produces a correctly-timed email.
 

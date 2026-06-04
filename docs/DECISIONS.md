@@ -5,6 +5,31 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-024 — Email transport: local SMTP + Gmail App Password; nightly brief 23:50
+**2026-06-04.** Outbound email is a **local `smtplib` SSL client** to
+`smtp.gmail.com:465` authenticated with a **Google App Password** — not a
+third-party email API/SaaS. Credentials live in `~/.listener.env` (WSL home,
+`chmod 600`, gitignored, never on the Windows drive or in git); `listener.sh`
+sources them into the always-on app. A **nightly "daily brief"** of open tasks is
+sent at **23:50 America/Chicago** via APScheduler (ADR-006) inside the FastAPI app,
+timed just before midnight so the next-morning Google Daily Brief captures it.
+Keeps privacy-first (ADR-016): outbound-only authenticated SMTP, no inbound
+exposure, no SaaS dependency; app passwords are scoped + revocable; `smtplib` is
+stdlib (only new dep: apscheduler). Closes Q-S2.
+
+### ADR-023 — Continuously-enriched speaker profiles + privacy delete
+**2026-06-04.** Wires up the long-planned per-person profiles (ADR-014): after each
+transcript a **local-LLM pass MERGES** new info into each named speaker's dossier
+(summary, relationship, emotion trend, recurring topics/habits, durable facts) —
+never from scratch, so it compounds. Rides `intents.py`'s existing per-transcript
+LLM pass (`profile.py`); honors the per-speaker **`do_not_profile`** opt-out. A
+**privacy delete** (`delete_speaker`, smart cascade) removes a person's tasks,
+profile, voiceprint, and their lines in every transcript; transcripts left empty
+(and their audio) are removed while **shared conversations keep other speakers** —
+a per-person "right to be forgotten." Delete is **UI-only** (confirm dialog),
+deliberately NOT an assistant/MCP tool; the assistant can only *read* profiles
+(`get_speaker_profile`, by name or id). Closes Q-S5.
+
 ### ADR-022 — Word-level speaker attribution via WhisperX
 **2026-06-03.** Segment-level merging mis-tagged words on Whisper segments that
 straddle a speaker change. Fix = **word-level**: **WhisperX** (faster-whisper +
@@ -188,13 +213,11 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
 
 ### Homelab (block before Phase 4)
 - *Resolved:* Q-S1 → ADR-009 (WSL2/Ubuntu).
-- **Q-S2: Email transport** — Gmail API vs SMTP app-password? "Day Ahead" + timed
-  emails. Confirm the Google Workspace account + intended tagging scheme.
+- *Resolved:* Q-S2 → ADR-024 (local SMTP + Gmail App Password; nightly brief 23:50).
 - *Resolved:* Q-S3 → ADR-016 (fully local via Ollama; model TBD from 12GB shortlist).
 - *Resolved:* Q-S4 → ADR-021 (audio 30 days, transcripts/embeddings/profiles indefinite).
-- **Q-S5: Voice-profile consent & retention** (ADR-014) — third parties haven't
-  opted in. Retention of embeddings, `do_not_profile` list, delete-a-person,
-  local-only guarantee (voice data never leaves the homelab).
+- *Resolved:* Q-S5 → ADR-023 (`do_not_profile` opt-out + per-person privacy delete;
+  profiles stay local per ADR-016; embedding/transcript retention per ADR-021).
 - **Q-S6: Speaker-match threshold** — cosine sim to call a voice "the same person"
   (~0.7–0.8) + min samples/turn-length before enrolling/auto-naming a cluster.
 - **Q-S7: pyannote model access** — gated HuggingFace models; need an HF account +

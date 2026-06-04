@@ -23,8 +23,10 @@ When the intent splitter emits a `SOON` intent with `due_at`:
   sensible time-of-day) — tune later.
 
 ### Tier LATER — daily rollup
-- One recurring `cron` job at **06:00** builds the "Day Ahead" summary from
-  `LATER` intents + `context` updates and emails it.
+- One recurring `cron` job at **23:50 local** builds the **daily brief** (Soon +
+  Coming up) and emails it — timed before midnight so the next-morning Google Daily
+  Brief captures it (see ADR-024; implemented in `mailer.py`, scheduled in `app.py`).
+- Per-action `date` jobs (the "7 PM trash" path above) are the next increment.
 
 ## Edits / cancellations
 - The PWA / conversational editor can change `due_at` or dismiss an intent →

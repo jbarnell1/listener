@@ -63,9 +63,10 @@ phase docs implement it.
   **known-voice library**. Unknown voices auto-cluster; you label a cluster once in
   the dashboard ("this voice = wife") and future audio auto-tags.
 - Speaker-attributed text makes intents attributable ("**wife** asked X") and builds
-  **relational profiles** (topics, emotional tone, recurring asks, recency).
-- All on the homelab GPU. ⚠️ Profiling people's voices is sensitive — consent &
-  retention policy is an open question (Q-S5).
+  **relational profiles** — continuously LLM-enriched per transcript (see ADR-023).
+- All on the homelab GPU. ⚠️ Profiling people's voices is sensitive — handled by a
+  per-speaker `do_not_profile` opt-out + per-person privacy delete (see ADR-023);
+  retention per ADR-021.
 
 ### Storage: encode on-device (can't store raw)
 - 16 kHz/16-bit raw ≈ 115 MB/hr → 128 MB holds ~1 hr. Not viable.
@@ -87,7 +88,8 @@ phase docs implement it.
 - **Tier SOON** → APScheduler one-off job fires the email/notification at the
   right time (e.g., "trash tonight" → 7 PM), surviving reboots via SQLite job
   store.
-- **Tier LATER** → folded into the daily "Day Ahead" morning email.
+- **Tier LATER** → folded into the nightly **daily brief** email (23:50 local, so
+  the next-morning Google Daily Brief captures it; see ADR-024).
 - This decouples low-latency delivery from always-on connectivity.
 
 ### Phone: minimal now, extensible later

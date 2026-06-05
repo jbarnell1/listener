@@ -19,6 +19,7 @@ listener.db*
 chunks/
 audio/
 backups/
+audio_data.h
 
 # Speaker voiceprints (biometric) + downloaded model caches — never commit
 speakers.json

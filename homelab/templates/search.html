@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">Search</h1>
+<form method="get" action="/search" class="field" style="margin-bottom:16px">
+  <input name="q" value="{{ q }}" placeholder="Search every conversation…" autofocus autocomplete="off">
+  <button class="btn">Search</button>
+</form>
+{% if q %}
+  <p class="sub">{{ results|length }} conversation{{ '' if results|length == 1 else 's' }} mention "{{ q }}".</p>
+  {% for r in results %}
+    <a href="/transcripts/{{ r.id }}" class="card" style="display:block;color:inherit">
+      <div class="name">Conversation #{{ r.id }} <span class="muted">· {{ r.created_at|localtime }}</span></div>
+      {% for m in r.matches %}
+        <div class="muted" style="margin-top:4px"><b>{{ m.who }}:</b> …{{ m.text|truncate(150) }}…</div>
+      {% endfor %}
+    </a>
+  {% else %}<div class="card"><div class="empty">No matches for "{{ q }}".</div></div>{% endfor %}
+{% endif %}
+{% endblock %}

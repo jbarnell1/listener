@@ -5,6 +5,19 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-030 — Durability: rotating DB backups + logon auto-start
+**2026-06-04.** The homelab is about to be always-on, so two durability gaps close.
+(1) **Backups** (`backup.py`): a daily 3:30 AM job snapshots `listener.db` via SQLite's
+online backup API (consistent under WAL) into `backups/` (gitignored), keeping the last
+14; offsite mirroring to **Backblaze B2** (or any rclone remote) is one env var away
+(`LISTENER_B2_REMOTE`). Rationale: the DB is the entire memory and a single file — local
+rotation guards corruption/accidental deletion, B2 adds offsite (disk/PC loss). (2)
+**Auto-start on reboot**: a hidden `.vbs` in the user's **Startup folder** runs
+`listener.sh up` at logon (Task Scheduler needs admin; the Startup folder doesn't) — for
+fully headless recovery, enable Windows auto-login. Also shipped: full-text **search**
+across all spoken text (`/search`) and multi-select **export** of conversations to
+Markdown (`/export`, from the topic + multi-tag-filter views).
+
 ### ADR-029 — Conversations organized by multi-label topic tags
 **2026-06-04.** Conversations are inherently multi-subject and arrive as snippets
 through the day, so rather than threading snippets into single-topic "conversations,"

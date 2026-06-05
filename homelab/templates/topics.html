@@ -7,17 +7,27 @@
     {% for a in active_tags %}<a class="chip good" href="{{ a.remove_url }}">#{{ a.name }} ✕</a>{% endfor %}
     <a class="chip" href="/topics">clear all</a>
   </div>
+  <form method="get" action="/export">
   <div class="card">
-    <h2>{{ snippets|length }} matching snippet{{ '' if snippets|length == 1 else 's' }}</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h2 style="margin:0">{{ snippets|length }} matching snippet{{ '' if snippets|length == 1 else 's' }}</h2>
+      {% if snippets %}<button class="btn ghost" style="padding:6px 12px;font-size:.82rem">⬇ Export selected</button>{% endif %}
+    </div>
+    <div style="margin-top:10px">
     {% for s in snippets %}
-      <a href="/transcripts/{{ s.id }}" class="row" style="color:inherit;--hue:{{ s.id|hue }}">
-        <div class="av">🎙️</div>
-        <div class="grow"><div class="name">{{ s.who or 'Conversation #' ~ s.id }}</div>
-          <div class="muted">{{ s.n_segments }} segments · {{ s.created_at|localtime }}</div></div>
+      <div class="row" style="--hue:{{ s.id|hue }}">
+        <input type="checkbox" name="ids" value="{{ s.id }}" style="width:auto;flex:none;accent-color:var(--accent)">
+        <a href="/transcripts/{{ s.id }}" class="grow" style="color:inherit;display:flex;align-items:center;gap:12px;min-width:0">
+          <div class="av">🎙️</div>
+          <div style="min-width:0"><div class="name">{{ s.who or 'Conversation #' ~ s.id }}</div>
+            <div class="muted">{{ s.n_segments }} segments · {{ s.created_at|localtime }}</div></div>
+        </a>
         <span class="chevron">›</span>
-      </a>
+      </div>
     {% else %}<div class="empty">No snippets carry all of these topics.</div>{% endfor %}
+    </div>
   </div>
+  </form>
   {% if other_tags %}
   <div class="sec">Narrow further</div>
   <div style="display:flex;flex-wrap:wrap;gap:8px">

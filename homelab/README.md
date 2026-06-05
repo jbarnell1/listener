@@ -171,6 +171,17 @@ reminder time. Auth is **OAuth**, not the SMTP app password:
 3. Create an OAuth **Desktop** client → download JSON to `~/.listener-gcp/client_secret.json`.
 4. `python google_sync.py --auth` (open the printed URL, authorize), then `--status`.
 
+## Durability — backups + reboot auto-start (ADR-030)
+- **Backups:** `backup.py` snapshots `listener.db` (SQLite online-backup API, WAL-safe)
+  into `backups/` (gitignored), keeps the last 14; scheduled 3:30 AM daily in the app.
+  Offsite to Backblaze B2 (or any rclone remote): set `LISTENER_B2_REMOTE=b2:bucket/path`.
+- **Auto-start at logon:** a hidden VBS in the Windows Startup folder
+  (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\listener-homelab.vbs`) runs
+  `wsl -d Ubuntu -e bash -lc "/mnt/c/Listener/homelab/listener.sh up"` at logon. For
+  fully headless recovery (no logon), enable Windows auto-login.
+- **Search & export:** `/search` (keyword across all spoken text); `/export?ids=…`
+  downloads selected conversations as Markdown (checkboxes on the topic + filter views).
+
 **Remote (phone) access — Tailscale Serve (tailnet-only, no public exposure):**
 ```bash
 tailscale serve --bg 8000      # → https://<machine>.<tailnet>.ts.net

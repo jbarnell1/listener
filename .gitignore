@@ -15,8 +15,10 @@ secrets.*
 listener.db*
 *.sqlite
 *.sqlite3
+*.db
 chunks/
 audio/
+backups/
 
 # Speaker voiceprints (biometric) + downloaded model caches — never commit
 speakers.json

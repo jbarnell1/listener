@@ -130,7 +130,8 @@ nav.bottom a.active{color:var(--accent)}
 </head>
 <body>
 <header class="top"><div class="wrap"><span class="brand">🎧 Listener</span>
-  <a href="/activity" class="bell" aria-label="What's new">🔔{% if new_count %}<span class="badge">{{ new_count if new_count < 100 else '99+' }}</span>{% endif %}</a>
+  <a href="/search" class="bell" style="margin-left:auto" aria-label="Search">🔍</a>
+  <a href="/activity" class="bell" style="margin-left:16px" aria-label="What's new">🔔{% if new_count %}<span class="badge">{{ new_count if new_count < 100 else '99+' }}</span>{% endif %}</a>
 </div></header>
 <main><div class="wrap">{% block body %}{% endblock %}</div></main>
 

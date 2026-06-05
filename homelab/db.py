@@ -158,6 +158,28 @@ def transcript(conn, tid):
     return conn.execute("SELECT * FROM transcripts WHERE id=?", (tid,)).fetchone()
 
 
+def search_transcripts(conn, q, limit=40):
+    """Keyword search across all spoken text; groups matches by conversation."""
+    q = (q or "").strip()
+    if not q:
+        return []
+    like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    rows = conn.execute(
+        "SELECT s.transcript_id, s.text, t.created_at, "
+        "COALESCE(sp.name, 'Unknown_' || sp.id, '?') AS who "
+        "FROM segments s JOIN transcripts t ON t.id = s.transcript_id "
+        "LEFT JOIN speakers sp ON sp.id = s.speaker_id "
+        "WHERE s.text LIKE ? ESCAPE '\\' "
+        "ORDER BY s.transcript_id DESC, s.t_start LIMIT ?", (like, limit * 5)).fetchall()
+    groups = {}
+    for r in rows:
+        g = groups.setdefault(r["transcript_id"], {
+            "id": r["transcript_id"], "created_at": r["created_at"], "matches": []})
+        if len(g["matches"]) < 3:
+            g["matches"].append({"who": r["who"], "text": r["text"]})
+    return list(groups.values())[:limit]
+
+
 def transcript_segments(conn, tid):
     return conn.execute(
         "SELECT s.*, COALESCE(sp.name, 'Unknown_' || sp.id, '?') AS who "

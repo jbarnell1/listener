@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import assistant
+import backup
 import db
 import google_sync
 import gpu_gate
@@ -114,7 +115,9 @@ async def lifespan(_app):
                       id="daily_brief", replace_existing=True, misfire_grace_time=3600)
     scheduler.add_job(purge.purge_old_audio, CronTrigger(hour=3, minute=0),
                       id="audio_purge", replace_existing=True, misfire_grace_time=7200)
-    scheduler.start()     # nightly email brief + 3 AM audio purge (ADR-021)
+    scheduler.add_job(backup.make_backup, CronTrigger(hour=3, minute=30),
+                      id="db_backup", replace_existing=True, misfire_grace_time=7200)
+    scheduler.start()     # nightly brief + 3 AM purge + 3:30 AM DB backup (ADR-030)
     yield
     scheduler.shutdown(wait=False)
     worker_mgr.stop()
@@ -416,6 +419,33 @@ def topic_rename(tag_id: int, name: str = Form("")):
 def topic_merge(tag_id: int, target: int = Form(...)):
     db.merge_tags(db.connect(), tag_id, target)
     return RedirectResponse(f"/topics/{target}", status_code=303)
+
+
+@app.get("/search", response_class=HTMLResponse)
+def search(request: Request, q: str = ""):
+    return page("search.html", request, active=None, q=q,
+                results=db.search_transcripts(db.connect(), q))
+
+
+@app.get("/export")
+def export(ids: list[int] = Query(default=[])):
+    c = db.connect()
+    out = []
+    for tid in ids:
+        t = db.transcript(c, tid)
+        if not t:
+            continue
+        out.append(f"# Conversation #{tid} — {t['created_at']}")
+        tg = [x["name"] for x in db.transcript_tag_list(c, tid)]
+        if tg:
+            out.append("Topics: " + ", ".join("#" + x for x in tg))
+        out.append("")
+        for s in db.transcript_segments(c, tid):
+            out.append(f"[{s['t_start']:.1f}s] {s['who']}: {s['text']}")
+        out.append("\n---\n")
+    body = "\n".join(out) or "No conversations selected."
+    return Response(body, media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=listener-export.md"})
 
 
 @app.get("/unknown", response_class=HTMLResponse)

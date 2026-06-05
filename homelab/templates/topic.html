@@ -10,19 +10,27 @@
 </div>
 {% endif %}
 
+<form method="get" action="/export">
 <div class="card">
-  <h2>Snippets</h2>
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <h2 style="margin:0">Snippets</h2>
+    {% if snippets %}<button class="btn ghost" style="padding:6px 12px;font-size:.82rem">⬇ Export selected</button>{% endif %}
+  </div>
+  <div style="margin-top:10px">
   {% for s in snippets %}
-    <a href="/transcripts/{{ s.id }}" class="row" style="color:inherit;--hue:{{ s.id|hue }}">
-      <div class="av">🎙️</div>
-      <div class="grow">
-        <div class="name">{{ s.who or 'Conversation #' ~ s.id }}</div>
-        <div class="muted">{{ s.n_segments }} segments · {{ s.created_at|localtime }}</div>
-      </div>
+    <div class="row" style="--hue:{{ s.id|hue }}">
+      <input type="checkbox" name="ids" value="{{ s.id }}" style="width:auto;flex:none;accent-color:var(--accent)">
+      <a href="/transcripts/{{ s.id }}" class="grow" style="color:inherit;display:flex;align-items:center;gap:12px;min-width:0">
+        <div class="av">🎙️</div>
+        <div style="min-width:0"><div class="name">{{ s.who or 'Conversation #' ~ s.id }}</div>
+          <div class="muted">{{ s.n_segments }} segments · {{ s.created_at|localtime }}</div></div>
+      </a>
       <span class="chevron">›</span>
-    </a>
+    </div>
   {% else %}<div class="empty">No snippets under this topic.</div>{% endfor %}
+  </div>
 </div>
+</form>
 
 <div class="card">
   <h2>Manage topic</h2>

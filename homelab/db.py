@@ -96,6 +96,12 @@ CREATE TABLE IF NOT EXISTS transcript_tags (
   tag_id        INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
   PRIMARY KEY (transcript_id, tag_id)
 );
+CREATE TABLE IF NOT EXISTS device_status (        -- periodic device telemetry (ADR-031)
+  device_id  TEXT PRIMARY KEY,
+  battery_mv INTEGER, rssi INTEGER, ssid TEXT, ip TEXT,
+  uptime_s   INTEGER, free_heap INTEGER, fw TEXT, seq INTEGER,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 TABLES = ["speakers", "embeddings", "chunks", "transcripts",
@@ -475,6 +481,49 @@ def queue_stats(conn):
         "SUM(transcribed=-1) AS failed FROM chunks").fetchone()
     return {"pending": row["pending"] or 0, "done": row["done"] or 0,
             "failed": row["failed"] or 0}
+
+
+# --- device telemetry (ADR-031) ---
+
+def _i(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def upsert_device_status(conn, d):
+    conn.execute(
+        "INSERT INTO device_status(device_id, battery_mv, rssi, ssid, ip, uptime_s, "
+        "  free_heap, fw, seq, updated_at) VALUES(?,?,?,?,?,?,?,?,?,datetime('now')) "
+        "ON CONFLICT(device_id) DO UPDATE SET battery_mv=excluded.battery_mv, "
+        "  rssi=excluded.rssi, ssid=excluded.ssid, ip=excluded.ip, uptime_s=excluded.uptime_s, "
+        "  free_heap=excluded.free_heap, fw=excluded.fw, seq=excluded.seq, "
+        "  updated_at=datetime('now')",
+        (str(d.get("device", "device"))[:64], _i(d.get("battery_mv")), _i(d.get("rssi")),
+         str(d.get("ssid", ""))[:64], str(d.get("ip", ""))[:40], _i(d.get("uptime_s")),
+         _i(d.get("free_heap")), str(d.get("fw", ""))[:24], _i(d.get("seq"))))
+    conn.commit()
+
+
+def device_status_list(conn):
+    return conn.execute("SELECT * FROM device_status ORDER BY updated_at DESC").fetchall()
+
+
+def lipo_pct(mv):
+    """Rough single-cell LiPo state-of-charge from resting voltage (mV)."""
+    if not mv or mv <= 0:
+        return None
+    pts = [(3000, 0), (3300, 6), (3600, 20), (3700, 40), (3750, 55),
+           (3850, 70), (3950, 85), (4100, 95), (4200, 100)]
+    if mv <= pts[0][0]:
+        return 0
+    if mv >= pts[-1][0]:
+        return 100
+    for (v0, p0), (v1, p1) in zip(pts, pts[1:]):
+        if v0 <= mv <= v1:
+            return int(p0 + (p1 - p0) * (mv - v0) / (v1 - v0))
+    return None
 
 
 # --- topic tags (multi-label per transcript; LLM-assigned) — ADR-029 ---

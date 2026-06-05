@@ -506,10 +506,29 @@ async def assistant_stream(q: str, sid: str = ""):
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+def _device_view(r):
+    online, ago = False, "—"
+    try:
+        dt = datetime.fromisoformat(r["updated_at"]).replace(tzinfo=_UTC)
+        secs = (datetime.now(_UTC) - dt).total_seconds()
+        online = secs < 900
+        ago = (f"{int(secs)}s ago" if secs < 60 else
+               f"{int(secs // 60)}m ago" if secs < 3600 else f"{int(secs // 3600)}h ago")
+    except (ValueError, TypeError):
+        pass
+    up = r["uptime_s"] or 0
+    return {"id": r["device_id"], "online": online, "ago": ago, "seq": r["seq"],
+            "battery_pct": db.lipo_pct(r["battery_mv"]), "battery_mv": r["battery_mv"],
+            "rssi": r["rssi"], "ssid": r["ssid"], "ip": r["ip"], "fw": r["fw"],
+            "free_heap": r["free_heap"],
+            "uptime": (f"{up // 3600}h {(up % 3600) // 60}m" if up else "—")}
+
+
 @app.get("/settings", response_class=HTMLResponse)
 def settings(request: Request, mail: str = ""):
     gpu_clear, gpu_detail = gpu_gate.peek()
     return page("settings.html", request, active="settings", mail=mail,
+                devices=[_device_view(r) for r in db.device_status_list(db.connect())],
                 mcp_running=mcp_mgr.running(), model=assistant.MODEL,
                 worker_running=worker_mgr.running(), worker=_worker_status(),
                 queue=db.queue_stats(db.connect()),
@@ -566,16 +585,9 @@ def segment_audio(seg_id: int):
     return Response(out, media_type="audio/wav")
 
 
-# ---- device ingest (the ONLY publicly-exposed path; Funnel + HMAC) ----
-@app.post("/ingest")
-async def ingest(request: Request, x_sig: str = Header(""),
-                 x_ts: str = Header(""), x_seq: str = Header("0")):
-    try:
-        body = await request.body()
-    except ClientDisconnect:                  # device/Funnel dropped mid-upload — not an error
-        raise HTTPException(400, "client disconnected")
-    if len(body) > 25 * 1024 * 1024:          # size cap on the public endpoint
-        raise HTTPException(413, "too large")
+# ---- device endpoints (publicly exposed via Funnel; HMAC-locked) ----
+def _verify_sig(x_ts: str, x_sig: str, body: bytes) -> int:
+    """Shared HMAC + replay-window check for the public device endpoints."""
     try:
         ts = int(x_ts)
     except ValueError:
@@ -585,6 +597,19 @@ async def ingest(request: Request, x_sig: str = Header(""),
     mac = hmac.new(INGEST_SECRET.encode(), f"{ts}".encode() + body, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(mac, x_sig):
         raise HTTPException(401, "bad signature")
+    return ts
+
+
+@app.post("/ingest")
+async def ingest(request: Request, x_sig: str = Header(""),
+                 x_ts: str = Header(""), x_seq: str = Header("0")):
+    try:
+        body = await request.body()
+    except ClientDisconnect:                  # device/Funnel dropped mid-upload — not an error
+        raise HTTPException(400, "client disconnected")
+    if len(body) > 25 * 1024 * 1024:          # size cap on the public endpoint
+        raise HTTPException(413, "too large")
+    ts = _verify_sig(x_ts, x_sig, body)
     path = os.path.join(CHUNK_DIR, f"chunk_{ts}_{x_seq}.bin")
     with open(path, "wb") as f:
         f.write(body)
@@ -594,6 +619,25 @@ async def ingest(request: Request, x_sig: str = Header(""),
                 (int(x_seq), str(ts), len(body), path))
     c.commit()
     return {"acked": cur.lastrowid}
+
+
+@app.post("/telemetry")
+async def telemetry(request: Request, x_sig: str = Header(""), x_ts: str = Header("")):
+    """Periodic device status (battery, signal, uptime…). Tiny + signed; sent more
+    often than audio. Stores the latest snapshot per device (ADR-031)."""
+    try:
+        body = await request.body()
+    except ClientDisconnect:
+        raise HTTPException(400, "client disconnected")
+    if len(body) > 4096:
+        raise HTTPException(413, "too large")
+    _verify_sig(x_ts, x_sig, body)
+    try:
+        data = json.loads(body)
+    except (ValueError, TypeError):
+        raise HTTPException(400, "bad json")
+    db.upsert_device_status(db.connect(), data)
+    return {"ok": True}
 
 
 @app.get("/healthz")

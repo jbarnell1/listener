@@ -1,7 +1,36 @@
 {% extends "base.html" %}
 {% block body %}
 <h1 class="page">Settings</h1>
-<p class="sub">Local services powering this dashboard.</p>
+<p class="sub">Your device + the local services powering this dashboard.</p>
+
+{% if devices %}{% for d in devices %}
+<div class="card" style="--hue:{{ 145 if d.online else 5 }}">
+  <h2>🎧 Device · {{ d.id }}</h2>
+  <div class="name">
+    {% if d.online %}<span class="chip good">🟢 online</span>{% else %}<span class="chip unk">⚪ offline</span>{% endif %}
+    <span class="muted">· last seen {{ d.ago }}</span>
+  </div>
+  <div class="muted" style="margin-top:3px">📶 {{ d.ssid or '—' }}{% if d.rssi %} · {{ d.rssi }} dBm{% endif %}</div>
+  {% if d.battery_pct is not none %}
+  <div style="display:flex;align-items:center;gap:10px;margin:9px 0">
+    <div style="flex:1;height:12px;border-radius:7px;background:var(--bg2);border:1px solid var(--border);overflow:hidden">
+      <div style="height:100%;width:{{ d.battery_pct }}%;background:{{ 'var(--good)' if d.battery_pct > 20 else 'var(--warn)' }}"></div>
+    </div>
+    <span class="name" style="font-variant-numeric:tabular-nums">🔋 {{ d.battery_pct }}%</span>
+    <span class="muted">{{ '%.2f'|format(d.battery_mv / 1000) }}V</span>
+  </div>
+  {% else %}<div class="muted" style="margin:6px 0">🔋 battery n/a (no sense divider on this board)</div>{% endif %}
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+    <span class="chip">IP {{ d.ip or '—' }}</span>
+    <span class="chip">up {{ d.uptime }}</span>
+    {% if d.free_heap %}<span class="chip">heap {{ d.free_heap // 1024 }}KB</span>{% endif %}
+    <span class="chip">fw {{ d.fw or '—' }}</span>
+    <span class="chip">pkt #{{ d.seq }}</span>
+  </div>
+</div>
+{% endfor %}{% else %}
+<div class="card"><div class="empty">No device has reported yet — telemetry appears here once the wearable checks in.</div></div>
+{% endif %}
 
 <div class="card">
   <h2>Assistant · MCP server</h2>

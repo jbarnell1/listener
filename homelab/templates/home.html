@@ -82,6 +82,9 @@
       <div class="grow">
         <div class="name">Conversation #{{ t.id }}</div>
         <div class="muted">{{ t.n_segments }} segments · {{ t.created_at|localtime }}</div>
+        {% if rec_tags[t.id] %}<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">
+          {% for tg in rec_tags[t.id] %}<span class="chip" style="font-size:.66rem;padding:2px 8px">#{{ tg.name }}</span>{% endfor %}
+        </div>{% endif %}
       </div>
       <span class="chevron">›</span>
     </a>

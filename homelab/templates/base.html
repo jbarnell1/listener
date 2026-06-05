@@ -68,8 +68,11 @@ h1.page{font-size:1.6rem;letter-spacing:-.025em;margin:4px 0 2px}
   border:none;border-radius:12px;padding:10px 16px;cursor:pointer;font-size:.92rem}
 .btn:hover{filter:brightness(1.07)}
 .btn.ghost{background:var(--card2);color:var(--text);border:1px solid var(--border);font-weight:700}
-input,select{background:var(--bg2);color:var(--text);border:1px solid var(--border);
-  border-radius:12px;padding:10px 13px;font-size:.95rem;width:100%}
+input,select,textarea{background:var(--bg2);color:var(--text);border:1px solid var(--border);
+  border-radius:12px;padding:10px 13px;font-size:.95rem;width:100%;font-family:inherit}
+textarea{resize:vertical}
+details summary{list-style:none}
+label{display:block;font-size:.78rem}
 .field{display:flex;gap:8px;flex-wrap:wrap}
 .field .grow,.field input,.field select{flex:1;min-width:140px}
 .field .btn{flex:none}

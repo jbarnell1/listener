@@ -348,6 +348,22 @@ def upsert_profile(conn, sid, *, summary, recent, traits, interests, dislikes,
     conn.commit()
 
 
+def edit_profile(conn, sid, *, summary, traits, interests, dislikes, dates, notable):
+    """User edit of the DURABLE profile fields. Leaves the transient 'recent' mood
+    and interaction_count untouched (those stay automatic)."""
+    conn.execute(
+        "INSERT INTO profiles(speaker_id, summary, traits_json, interests_json, "
+        "  dislikes_json, dates_json, notable_json, interaction_count, updated_at) "
+        "VALUES(?,?,?,?,?,?,?,0,datetime('now')) "
+        "ON CONFLICT(speaker_id) DO UPDATE SET summary=excluded.summary, "
+        "  traits_json=excluded.traits_json, interests_json=excluded.interests_json, "
+        "  dislikes_json=excluded.dislikes_json, dates_json=excluded.dates_json, "
+        "  notable_json=excluded.notable_json, updated_at=datetime('now')",
+        (sid, summary, json.dumps(traits), json.dumps(interests), json.dumps(dislikes),
+         json.dumps(dates), json.dumps(notable)))
+    conn.commit()
+
+
 def set_do_not_profile(conn, sid, flag):
     conn.execute("UPDATE speakers SET do_not_profile=?, updated_at=datetime('now') WHERE id=?",
                  (1 if flag else 0, sid))
@@ -489,6 +505,23 @@ def tag_transcripts(conn, tag_id):
         "FROM transcript_tags tt JOIN transcripts tr ON tr.id = tt.transcript_id "
         "LEFT JOIN segments s ON s.transcript_id = tr.id "
         "WHERE tt.tag_id = ? GROUP BY tr.id ORDER BY tr.id DESC", (tag_id,)).fetchall()
+
+
+def transcripts_with_all_tags(conn, tag_ids):
+    """Snippets carrying ALL of `tag_ids` (multi-tag AND filter)."""
+    if not tag_ids:
+        return []
+    ph = ",".join("?" * len(tag_ids))
+    return conn.execute(
+        "SELECT tr.id, tr.created_at, "
+        "(SELECT COUNT(*) FROM segments s WHERE s.transcript_id=tr.id) AS n_segments, "
+        "(SELECT GROUP_CONCAT(DISTINCT COALESCE(sp.name, 'Unknown_' || sp.id)) "
+        " FROM segments s2 JOIN speakers sp ON sp.id = s2.speaker_id "
+        " WHERE s2.transcript_id = tr.id) AS who "
+        "FROM transcript_tags tt JOIN transcripts tr ON tr.id = tt.transcript_id "
+        f"WHERE tt.tag_id IN ({ph}) "
+        "GROUP BY tr.id HAVING COUNT(DISTINCT tt.tag_id) = ? ORDER BY tr.id DESC",
+        (*tag_ids, len(tag_ids))).fetchall()
 
 
 def transcript_tag_list(conn, tid):

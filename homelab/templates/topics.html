@@ -1,15 +1,45 @@
 {% extends "base.html" %}
 {% block body %}
 <h1 class="page">Topics</h1>
-<p class="sub">What you talk about, gathered across conversations. Tap one to follow that subject over time.</p>
-{% for t in tags %}
-  <a href="/topics/{{ t.id }}" class="card" style="display:block;color:inherit">
-    <div class="name" style="font-size:1.04rem">#{{ t.name }}
-      <span class="muted">· {{ t.n }} snippet{{ '' if t.n == 1 else 's' }}</span></div>
-    {% if t.summary %}<div class="muted" style="margin-top:4px">{{ t.summary|truncate(180) }}</div>{% endif %}
-    {% if t.last_at %}<div class="muted" style="font-size:.75rem;margin-top:6px">last heard {{ t.last_at|localtime }}</div>{% endif %}
-  </a>
+{% if filtering %}
+  <p class="sub">Snippets matching <b>all</b> selected topics.</p>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+    {% for a in active_tags %}<a class="chip good" href="{{ a.remove_url }}">#{{ a.name }} ✕</a>{% endfor %}
+    <a class="chip" href="/topics">clear all</a>
+  </div>
+  <div class="card">
+    <h2>{{ snippets|length }} matching snippet{{ '' if snippets|length == 1 else 's' }}</h2>
+    {% for s in snippets %}
+      <a href="/transcripts/{{ s.id }}" class="row" style="color:inherit;--hue:{{ s.id|hue }}">
+        <div class="av">🎙️</div>
+        <div class="grow"><div class="name">{{ s.who or 'Conversation #' ~ s.id }}</div>
+          <div class="muted">{{ s.n_segments }} segments · {{ s.created_at|localtime }}</div></div>
+        <span class="chevron">›</span>
+      </a>
+    {% else %}<div class="empty">No snippets carry all of these topics.</div>{% endfor %}
+  </div>
+  {% if other_tags %}
+  <div class="sec">Narrow further</div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    {% for o in other_tags %}<a class="chip" href="{{ o.add_url }}">+ #{{ o.name }}
+      <b style="color:var(--accent)">{{ o.n }}</b></a>{% endfor %}
+  </div>{% endif %}
 {% else %}
-  <div class="card"><div class="empty">No topics yet — they form automatically as conversations are processed.</div></div>
-{% endfor %}
+  <p class="sub">What you talk about, gathered across conversations. Tap one to follow it — or combine a few to narrow.</p>
+  {% for t in tags %}
+    <a href="/topics/{{ t.id }}" class="card" style="display:block;color:inherit">
+      <div class="name" style="font-size:1.04rem">#{{ t.name }}
+        <span class="muted">· {{ t.n }} snippet{{ '' if t.n == 1 else 's' }}</span></div>
+      {% if t.summary %}<div class="muted" style="margin-top:4px">{{ t.summary|truncate(180) }}</div>{% endif %}
+      {% if t.last_at %}<div class="muted" style="font-size:.75rem;margin-top:6px">last heard {{ t.last_at|localtime }}</div>{% endif %}
+    </a>
+  {% else %}<div class="card"><div class="empty">No topics yet — they form automatically as conversations are processed.</div></div>{% endfor %}
+  {% if tags|length > 1 %}
+  <div class="sec">Combine topics</div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    {% for t in tags %}{% if t.n %}<a class="chip" href="/topics?t={{ t.id }}">#{{ t.name }}</a>{% endif %}{% endfor %}
+  </div>
+  <p class="muted" style="margin-top:8px;font-size:.78rem">Tap a chip to filter, then add more to narrow.</p>
+  {% endif %}
+{% endif %}
 {% endblock %}

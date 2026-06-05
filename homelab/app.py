@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, Form, Header, HTTPException, Request, Response
+from fastapi import FastAPI, Form, Header, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -28,6 +28,7 @@ import assistant
 import db
 import google_sync
 import gpu_gate
+import intents
 import mailer
 import purge
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -232,10 +233,12 @@ def home(request: Request):
     hour = datetime.now(_CT).hour
     greeting = ("Good morning" if hour < 12 else
                 "Good afternoon" if hour < 18 else "Good evening")
+    recents = db.recent_transcripts(c, 6)
     return page("home.html", request, active="home", counts=db.counts(c),
                 greeting=greeting, task_groups=_task_groups(allopen), open_count=len(allopen),
                 review=_review_nudges(c), unknowns=unknowns, samples=samples,
-                enrolled=db.enrolled_speakers(c), transcripts=db.recent_transcripts(c, 6))
+                enrolled=db.enrolled_speakers(c), transcripts=recents,
+                rec_tags={r["id"]: db.transcript_tag_list(c, r["id"]) for r in recents})
 
 
 @app.post("/tasks/add")
@@ -243,11 +246,8 @@ def add_task(action: str = Form("")):
     a = action.strip()
     if a:
         c = db.connect()
-        sp = db.get_self(c)
-        c.execute("INSERT INTO intents(speaker_id, action, kind, tier, status) "
-                  "VALUES (?, ?, 'task', 'SOON', 'pending')", (sp["id"] if sp else None, a))
-        c.commit()
-        try:                                  # push to Google Tasks if connected
+        intents.add_manual(c, a)              # LLM-classify (kind + due) like a spoken one
+        try:                                  # push to Calendar/Tasks (ADR-026)
             google_sync.sync_pending(c)
         except Exception:  # noqa: BLE001
             pass
@@ -296,6 +296,27 @@ def set_relationship(sid: int, relationship: str = Form("")):
     return RedirectResponse(f"/speakers/{sid}", status_code=303)
 
 
+@app.post("/speakers/{sid}/profile")
+def edit_speaker_profile(sid: int, summary: str = Form(""), traits: str = Form(""),
+                         interests: str = Form(""), dislikes: str = Form(""),
+                         notable: str = Form(""), dates: str = Form("")):
+    def lines(s):
+        return [x.strip() for x in s.splitlines() if x.strip()]
+
+    def parse_dates(s):
+        out = []
+        for ln in lines(s):
+            sep = "=" if "=" in ln else (":" if ":" in ln else "")
+            label, _, d = ln.partition(sep) if sep else (ln, "", "")
+            out.append({"label": label.strip(), "date": d.strip()})
+        return out
+
+    db.edit_profile(db.connect(), sid, summary=summary.strip(), traits=lines(traits),
+                    interests=lines(interests), dislikes=lines(dislikes),
+                    notable=lines(notable), dates=parse_dates(dates))
+    return RedirectResponse(f"/speakers/{sid}", status_code=303)
+
+
 @app.post("/speakers/{sid}/delete")
 def delete_speaker(sid: int):
     db.delete_speaker(db.connect(), sid)
@@ -339,8 +360,22 @@ def transcript(request: Request, tid: int):
 
 
 @app.get("/topics", response_class=HTMLResponse)
-def topics(request: Request):
-    return page("topics.html", request, active="topics", tags=db.list_tags(db.connect()))
+def topics(request: Request, t: list[int] = Query(default=[])):
+    c = db.connect()
+    all_tags = db.list_tags(c)
+    if not t:
+        return page("topics.html", request, active="topics", tags=all_tags, filtering=False)
+
+    def url(ids):
+        return "/topics" + ("?" + "&".join(f"t={i}" for i in ids) if ids else "")
+    active_tags = [{"id": tg["id"], "name": tg["name"],
+                    "remove_url": url([i for i in t if i != tg["id"]])}
+                   for tg in all_tags if tg["id"] in t]
+    other_tags = [{"id": tg["id"], "name": tg["name"], "n": tg["n"], "add_url": url(t + [tg["id"]])}
+                  for tg in all_tags if tg["id"] not in t and tg["n"]]
+    return page("topics.html", request, active="topics", tags=all_tags, filtering=True,
+                active_tags=active_tags, other_tags=other_tags,
+                snippets=db.transcripts_with_all_tags(c, t))
 
 
 @app.get("/topics/{ref}", response_class=HTMLResponse)

@@ -195,6 +195,34 @@ def run_for_transcript(conn, tid, verbose=False):
     return stored
 
 
+def add_manual(conn, text):
+    """Parse a hand-typed task/note through the same LLM (kind + due) so it routes to
+    Calendar/Tasks like a spoken one. Returns the new intent id."""
+    now_local = datetime.now(TZ)
+    system = SYSTEM % {"now": now_local.strftime("%Y-%m-%d %H:%M (%A)"), "tz": TZ_NAME}
+    action, kind, tier, due_iso = text, "task", "SOON", None
+    try:
+        raw = ollama_chat(system, f"Me: {text}")
+        data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
+        items = data.get("intents") or []
+        if items:
+            it = items[0]
+            due = to_utc(it.get("due_local"), it.get("due_text"), now_local)
+            action = it.get("action") or text
+            kind = it.get("kind") or "task"
+            tier = it.get("tier") or "SOON"
+            due_iso = due.isoformat() if due else None
+    except Exception as e:  # noqa: BLE001 — fall back to a plain task
+        print(f"add_manual parse failed: {e}")
+    sp = db.get_self(conn)
+    cur = conn.execute(
+        "INSERT INTO intents(speaker_id, action, kind, tier, due_at, status, source_quote) "
+        "VALUES (?,?,?,?,?, 'pending', ?)",
+        (sp["id"] if sp else None, action, kind, tier, due_iso, text))
+    conn.commit()
+    return cur.lastrowid
+
+
 def main():
     if "--dedup" in sys.argv:                  # one-time cleanup of existing duplicates
         dedupe_existing(db.connect())

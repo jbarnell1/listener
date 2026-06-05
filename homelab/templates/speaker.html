@@ -75,6 +75,27 @@
   {% else %}
     <div class="empty">No profile yet — it builds automatically as {{ sp.label }} is heard in more conversations.</div>
   {% endif %}
+  <details style="margin-top:.8em">
+    <summary class="muted" style="cursor:pointer;font-weight:700">✏️ Edit profile</summary>
+    <form method="post" action="/speakers/{{ sp.id }}/profile"
+          style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+      <label>Summary
+        <textarea name="summary" rows="2">{{ profile.summary if profile else '' }}</textarea></label>
+      <label>Personality — one per line
+        <textarea name="traits" rows="3">{{ (profile.traits if profile else [])|join('\n') }}</textarea></label>
+      <label>Loves &amp; interests — one per line
+        <textarea name="interests" rows="3">{{ (profile.interests if profile else [])|join('\n') }}</textarea></label>
+      <label>Dislikes — one per line
+        <textarea name="dislikes" rows="2">{{ (profile.dislikes if profile else [])|join('\n') }}</textarea></label>
+      <label>Important dates — one per line: <span class="muted">Label = date</span>
+        <textarea name="dates" rows="2">{% for d in (profile.dates if profile else []) %}{{ d.label }} = {{ d.date }}
+{% endfor %}</textarea></label>
+      <label>Good to know — one per line
+        <textarea name="notable" rows="3">{{ (profile.notable if profile else [])|join('\n') }}</textarea></label>
+      <button class="btn">Save profile</button>
+      <span class="muted" style="font-size:.74rem">The "Lately" mood updates automatically — not editable.</span>
+    </form>
+  </details>
   <form method="post" action="/speakers/{{ sp.id }}/profiling" style="margin-top:.8em">
     {% if sp.do_not_profile %}<button class="btn ghost">Enable profiling</button>
     {% else %}<button class="btn ghost">Disable profiling</button>{% endif %}

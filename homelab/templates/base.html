@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% block title %}Listener{% endblock %}</title>
+<meta name="theme-color" content="#0a0c10">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Listener">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script src="/static/htmx.min.js"></script>
 <style>
 :root{
@@ -100,6 +108,14 @@ nav.bottom a{flex:1;display:flex;flex-direction:column;align-items:center;justif
   gap:3px;padding:7px 0;color:var(--muted);font-size:.67rem;font-weight:600}
 nav.bottom a .ic{font-size:1.3rem;line-height:1}
 nav.bottom a.active{color:var(--accent)}
+.nav-badge{position:absolute;top:5px;left:calc(50% + 7px);background:var(--accent2);color:#0a0c10;
+  font-size:.56rem;font-weight:800;min-width:15px;height:15px;border-radius:999px;
+  display:flex;align-items:center;justify-content:center;padding:0 4px;box-shadow:0 0 0 2px rgba(13,17,23,.92)}
+.devbanner{display:flex;align-items:center;gap:8px;margin:9px 0 -6px;padding:9px 13px;
+  border-radius:12px;font-size:.84rem;font-weight:600;border:1px solid}
+.devbanner.warn{color:var(--warn);background:#1f1b11;border-color:#4c4329}
+.devbanner.muted{color:var(--muted);background:var(--card);border-color:var(--border)}
+.devbanner .x{margin-left:auto;font-size:1rem;color:inherit}
 
 /* assistant FAB + chat sheet */
 .fab{position:fixed;right:18px;bottom:calc(var(--nav-safe) + 16px);
@@ -125,7 +141,9 @@ nav.bottom a.active{color:var(--accent)}
 .sheet .inp input{flex:1}
 .scrim{position:fixed;inset:0;z-index:38;background:#0008;opacity:0;pointer-events:none;transition:opacity .3s}
 .scrim.open{opacity:1;pointer-events:auto}
-@media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}h1.page{font-size:1.42rem}}
+@media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}h1.page{font-size:1.42rem}
+  .x{min-width:42px;min-height:42px;display:inline-flex;align-items:center;justify-content:center}
+  .btn{padding:11px 16px}}
 </style>
 </head>
 <body>
@@ -133,13 +151,20 @@ nav.bottom a.active{color:var(--accent)}
   <a href="/search" class="bell" style="margin-left:auto" aria-label="Search">🔍</a>
   <a href="/activity" class="bell" style="margin-left:16px" aria-label="What's new">🔔{% if new_count %}<span class="badge">{{ new_count if new_count < 100 else '99+' }}</span>{% endif %}</a>
 </div></header>
+{% if device_alert %}
+<div class="wrap"><a href="/settings" id="devbanner" class="devbanner {{ device_alert.level }}"
+   data-key="{{ device_alert.text }}">{{ device_alert.icon }} {{ device_alert.text }}
+   <span class="x" onclick="event.preventDefault();event.stopPropagation();LSbanner.dismiss()">✕</span></a></div>
+{% endif %}
 <main><div class="wrap">{% block body %}{% endblock %}</div></main>
 
 <nav class="bottom">
   <a href="/" class="{{ 'active' if active=='home' }}"><span class="ic">🏠</span>Home</a>
-  <a href="/tasks" class="{{ 'active' if active=='tasks' }}"><span class="ic">✅</span>Tasks</a>
+  <a href="/tasks" class="{{ 'active' if active=='tasks' }}"><span class="ic">✅</span>Tasks
+    {% if review_count %}<span class="nav-badge">{{ review_count if review_count < 100 else '99+' }}</span>{% endif %}</a>
   <a href="/topics" class="{{ 'active' if active=='topics' }}"><span class="ic">🏷️</span>Topics</a>
-  <a href="/speakers" class="{{ 'active' if active=='speakers' }}"><span class="ic">👥</span>Speakers</a>
+  <a href="/speakers" class="{{ 'active' if active=='speakers' }}"><span class="ic">👥</span>Speakers
+    {% if unknown_count %}<span class="nav-badge">{{ unknown_count if unknown_count < 100 else '99+' }}</span>{% endif %}</a>
   <a href="/settings" class="{{ 'active' if active=='settings' }}"><span class="ic">⚙️</span>Settings</a>
 </nav>
 
@@ -201,6 +226,15 @@ const LS = {
     es.onerror = ()=>{ es.close(); this.busy=false; };
   }
 };
+// PWA: register the service worker for installability + offline app shell.
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+}
+// Device banner: dismiss persists until the device's state (the text) changes.
+const LSbanner={dismiss(){const b=document.getElementById('devbanner');
+  if(b){localStorage.setItem('devbanner_seen', b.dataset.key); b.style.display='none';}}};
+(function(){const b=document.getElementById('devbanner');
+  if(b && localStorage.getItem('devbanner_seen')===b.dataset.key) b.style.display='none';})();
 </script>
 </body>
 </html>

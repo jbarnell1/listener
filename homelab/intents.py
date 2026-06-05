@@ -206,9 +206,9 @@ def run_for_transcript(conn, tid, verbose=False):
         status = ("pending" if kind == "followup" or conf is None or conf >= triage_thr
                   else "suggested")
         conn.execute(
-            "INSERT INTO intents(speaker_id, action, kind, tier, due_at, status, "
-            "source_quote, confidence) VALUES (?,?,?,?,?,?,?,?)",
-            (sp["id"] if sp else None, it.get("action"), kind, it.get("tier"),
+            "INSERT INTO intents(speaker_id, transcript_id, action, kind, tier, due_at, "
+            "status, source_quote, confidence) VALUES (?,?,?,?,?,?,?,?,?)",
+            (sp["id"] if sp else None, tid, it.get("action"), kind, it.get("tier"),
              due_iso, status, it.get("source_quote"), conf))
         stored.append(it)
         if verbose:

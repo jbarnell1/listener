@@ -161,9 +161,11 @@
   {% endif %}
 </div>
 
-<div class="card">
-  <h2>⚙️ Tuning &amp; behavior</h2>
-  <p class="muted" style="margin:0 0 4px">Live knobs — changes apply immediately, no restart.
+<details class="card">
+  <summary style="cursor:pointer;display:flex;align-items:center;gap:8px">
+    <h2 style="display:inline;margin:0">⚙️ Tuning &amp; behavior</h2>
+    <span class="muted" style="font-size:.8rem">· advanced — tap to expand</span></summary>
+  <p class="muted" style="margin:10px 0 4px">Live knobs — changes apply immediately, no restart.
   Leave at default unless something feels off; each shows its built-in default.</p>
   <form method="post" action="/settings/tuning">
     {% for group, knobs in tuning %}
@@ -193,7 +195,7 @@
       <button class="btn ghost" formaction="/settings/tuning/reset">Reset all to defaults</button>
     </div>
   </form>
-</div>
+</details>
 
 <div class="card">
   <h2>Privacy</h2>

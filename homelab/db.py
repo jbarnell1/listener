@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 CREATE TABLE IF NOT EXISTS intents (
   id           INTEGER PRIMARY KEY,
   segment_id   INTEGER REFERENCES segments(id),
+  transcript_id INTEGER REFERENCES transcripts(id),   -- source conversation (backlink, ADR-036)
   speaker_id   INTEGER REFERENCES speakers(id),
   action       TEXT, tier TEXT, due_at TEXT,        -- due_at stored UTC (ADR-017)
   kind         TEXT,                                -- event | task | followup (ADR-026)
@@ -144,6 +145,8 @@ def _migrate(conn):
         conn.execute("ALTER TABLE intents ADD COLUMN confidence REAL")
     if "close_suggested" not in it:
         conn.execute("ALTER TABLE intents ADD COLUMN close_suggested INTEGER NOT NULL DEFAULT 0")
+    if "transcript_id" not in it:
+        conn.execute("ALTER TABLE intents ADD COLUMN transcript_id INTEGER")
     conn.commit()
 
 
@@ -313,6 +316,20 @@ def approve_intent(conn, iid):
     """Promote a suggested item to active (caller then syncs it to Google)."""
     conn.execute("UPDATE intents SET status='pending', close_suggested=0 WHERE id=?", (iid,))
     conn.commit()
+
+
+def approve_all_suggested(conn):
+    """Promote every suggested item to active. Returns how many."""
+    n = conn.execute("UPDATE intents SET status='pending' WHERE status='suggested'").rowcount
+    conn.commit()
+    return n
+
+
+def dismiss_all_suggested(conn):
+    """Dismiss every suggested item at once. Returns how many."""
+    n = conn.execute("UPDATE intents SET status='dismissed' WHERE status='suggested'").rowcount
+    conn.commit()
+    return n
 
 
 def suggest_close(conn, iid, kind, note):

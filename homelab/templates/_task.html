@@ -7,11 +7,13 @@
       {% if i.due_at %} · <span class="due">{{ i.due_at|localtime }}</span>{% endif %}
     </div>
     {% if i.source_quote %}<div class="quote">"{{ i.source_quote }}"</div>{% endif %}
-    {% if i.calendar_event_id or i.gtask_id or i.kind == 'followup' %}
+    {% if i.calendar_event_id or i.gtask_id or i.kind == 'followup' or i.transcript_id %}
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
       {% if i.calendar_event_id %}<a class="chip good" href="{{ i.calendar_link }}" target="_blank" rel="noopener">📅 On Calendar ↗</a>
       {% elif i.gtask_id %}<span class="chip good">✅ Google Task</span>
       {% elif i.kind == 'followup' %}<span class="chip">✉️ In digest</span>{% endif %}
+      {% if i.transcript_id %}<a class="chip" href="/transcripts/{{ i.transcript_id }}">💬 from conversation</a>{% endif %}
+      {% if i.confidence and (i.calendar_event_id or i.gtask_id) %}<span class="chip" title="Auto-added — how sure the AI was">🤖 {{ (i.confidence * 100)|int }}%</span>{% endif %}
     </div>{% endif %}
   </div>
   <span class="tier {{ 'soon' if i.tier == 'SOON' else 'later' }}">{{ i.tier }}</span>

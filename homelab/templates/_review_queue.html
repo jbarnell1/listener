@@ -19,6 +19,13 @@
   </div>
   {% endfor %}
 
+  {% if suggested|length > 1 %}
+  <div class="row" style="gap:8px">
+    <div class="grow muted" style="font-size:.8rem">{{ suggested|length }} suggestions to review</div>
+    <form method="post" action="/tasks/review/approve-all"><button class="btn" style="padding:7px 12px">Add all</button></form>
+    <form method="post" action="/tasks/review/dismiss-all"><button class="btn ghost" style="padding:7px 12px">Dismiss all</button></form>
+  </div>
+  {% endif %}
   {% for i in suggested %}
   <div class="row" id="rev-{{ i.id }}" style="--hue:{{ i.speaker_id|hue }}">
     <div class="av">{{ i.who|initials }}</div>

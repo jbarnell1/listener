@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Form, Header, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import ClientDisconnect
@@ -249,13 +249,19 @@ tpl.env.filters["localtime"] = _localtime
 
 
 def page(name, request, **ctx):
-    if "new_count" not in ctx:                # activity badge on every page
-        try:
-            c = db.connect()
+    """Render a page, injecting the global nav badges + device alert every time."""
+    try:
+        c = db.connect()
+        if "new_count" not in ctx:            # activity bell badge
             ctx["new_count"] = db.activity_count(
                 c, db.meta_get(c, "activity_seen_at", "1970-01-01"))
-        except Exception:  # noqa: BLE001
-            ctx["new_count"] = 0
+        ctx.setdefault("review_count", len(db.suggested_intents(c)) + len(db.close_pending_intents(c)))
+        ctx.setdefault("unknown_count", len(db.unknown_speakers(c)))
+        ctx.setdefault("device_alert", _device_alert(c))
+    except Exception:  # noqa: BLE001
+        for k, v in (("new_count", 0), ("review_count", 0), ("unknown_count", 0),
+                     ("device_alert", None)):
+            ctx.setdefault(k, v)
     return tpl.TemplateResponse(request, name, ctx)
 
 
@@ -312,6 +318,21 @@ def _review_nudges(c):
     return nudges[:5]
 
 
+def _setup_steps(c):
+    """First-run checklist for the Home page; each step reads a live status."""
+    g = google_sync.status()
+    return [
+        {"done": bool(db.get_self(c)), "icon": "⭐",
+         "text": "Tell me which voice is you", "href": "/speakers"},
+        {"done": bool(g.get("connected")), "icon": "📅",
+         "text": "Connect Google Calendar & Tasks", "href": "/settings"},
+        {"done": mailer.configured(), "icon": "✉️",
+         "text": "Set up the nightly email brief", "href": "/settings"},
+        {"done": bool(db.device_status_list(c)), "icon": "🎧",
+         "text": "Flash & connect the wearable", "href": "/settings"},
+    ]
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     c = db.connect()
@@ -322,8 +343,10 @@ def home(request: Request):
     greeting = ("Good morning" if hour < 12 else
                 "Good afternoon" if hour < 18 else "Good evening")
     recents = db.recent_transcripts(c, 6)
+    setup = _setup_steps(c)
     return page("home.html", request, active="home", counts=db.counts(c),
                 greeting=greeting, task_groups=_task_groups(allopen), open_count=len(allopen),
+                setup=setup, setup_done=all(s["done"] for s in setup),
                 review=_review_nudges(c), unknowns=unknowns, samples=samples,
                 enrolled=db.enrolled_speakers(c), transcripts=recents,
                 suggested=db.suggested_intents(c), close_pending=db.close_pending_intents(c),
@@ -544,6 +567,29 @@ def unknown(request: Request):
                 samples=samples, enrolled=db.enrolled_speakers(c))
 
 
+@app.post("/unknown/batch")
+async def unknown_batch(request: Request):
+    """Assign many unknown voices in one go: per id, merge into an existing person
+    (wins) or name as new. Empty rows are skipped."""
+    form = await request.form()
+    c = db.connect()
+    merged = named = 0
+    for r in db.unknown_speakers(c):
+        sid = r["id"]
+        target = (form.get(f"merge_{sid}") or "").strip()
+        name = (form.get(f"name_{sid}") or "").strip()
+        if target:
+            try:
+                db.merge_speakers(c, sid, int(target))
+                merged += 1
+            except (ValueError, TypeError):
+                pass
+        elif name:
+            db.rename_speaker(c, sid, name)
+            named += 1
+    return RedirectResponse("/unknown", status_code=303)
+
+
 @app.get("/tasks", response_class=HTMLResponse)
 def tasks(request: Request):
     c = db.connect()
@@ -561,6 +607,25 @@ def dismiss(request: Request, iid: int):
     if _hx(request):
         return HTMLResponse("")  # HTMX removes the row
     return RedirectResponse("/tasks", status_code=303)
+
+
+@app.post("/tasks/review/approve-all")
+def approve_all(request: Request):
+    """Bulk: add every triaged suggestion to Calendar/Tasks."""
+    c = db.connect()
+    db.approve_all_suggested(c)
+    try:
+        google_sync.sync_pending(c)
+    except Exception:  # noqa: BLE001
+        pass
+    return RedirectResponse(request.headers.get("referer", "/"), status_code=303)
+
+
+@app.post("/tasks/review/dismiss-all")
+def dismiss_all(request: Request):
+    """Bulk: dismiss every triaged suggestion."""
+    db.dismiss_all_suggested(db.connect())
+    return RedirectResponse(request.headers.get("referer", "/"), status_code=303)
 
 
 @app.post("/tasks/{iid}/approve")
@@ -643,21 +708,38 @@ async def assistant_stream(q: str, sid: str = ""):
 
 
 def _device_view(r):
-    online, ago = False, "—"
+    online, ago, secs = False, "—", None
     try:
         dt = datetime.fromisoformat(r["updated_at"]).replace(tzinfo=_UTC)
         secs = (datetime.now(_UTC) - dt).total_seconds()
         online = secs < 900
         ago = (f"{int(secs)}s ago" if secs < 60 else
-               f"{int(secs // 60)}m ago" if secs < 3600 else f"{int(secs // 3600)}h ago")
+               f"{int(secs // 60)}m ago" if secs < 3600 else
+               f"{int(secs // 3600)}h ago" if secs < 86400 else f"{int(secs // 86400)}d ago")
     except (ValueError, TypeError):
         pass
     up = r["uptime_s"] or 0
-    return {"id": r["device_id"], "online": online, "ago": ago, "seq": r["seq"],
+    return {"id": r["device_id"], "online": online, "ago": ago, "secs": secs, "seq": r["seq"],
             "battery_pct": db.lipo_pct(r["battery_mv"]), "battery_mv": r["battery_mv"],
             "rssi": r["rssi"], "ssid": r["ssid"], "ip": r["ip"], "fw": r["fw"],
             "free_heap": r["free_heap"],
             "uptime": (f"{up // 3600}h {(up % 3600) // 60}m" if up else "—")}
+
+
+def _device_alert(c):
+    """A single banner-worthy device condition, or None. Low battery wins; otherwise
+    a recently-active device that's gone quiet (not a long-idle test board)."""
+    rows = db.device_status_list(c)
+    if not rows:
+        return None
+    d = _device_view(rows[0])                       # most recently updated device
+    if d["battery_pct"] is not None and d["battery_pct"] <= 15:
+        return {"level": "warn", "icon": "🔋",
+                "text": f"{d['id']} battery low — {d['battery_pct']}%"}
+    if d["secs"] is not None and 900 < d["secs"] < 2 * 86400:   # quiet 15min–2 days
+        return {"level": "muted", "icon": "📴",
+                "text": f"{d['id']} hasn't checked in — last seen {d['ago']}"}
+    return None
 
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -839,3 +921,18 @@ async def telemetry(request: Request, x_sig: str = Header(""), x_ts: str = Heade
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
+
+
+# ---- PWA: manifest + service worker (ADR-036). SW served from root so its scope
+# is the whole app; manifest gets the correct content-type for installability. ----
+@app.get("/manifest.webmanifest")
+def manifest():
+    return FileResponse(os.path.join(HERE, "static", "manifest.webmanifest"),
+                        media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+def service_worker():
+    return FileResponse(os.path.join(HERE, "static", "sw.js"),
+                        media_type="application/javascript",
+                        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"})

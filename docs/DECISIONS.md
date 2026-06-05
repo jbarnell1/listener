@@ -5,6 +5,20 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-031 — Device telemetry (status + battery)
+**2026-06-05.** The wearable periodically reports health to the homelab on a signed
+**`/telemetry`** endpoint (same HMAC scheme as `/ingest`, shared `_verify_sig`; Funnel-
+exposed on :8443). Tiny JSON — `battery_mv, rssi, ssid, ip, uptime_s, free_heap, fw,
+seq` — sent **more often than audio** (~5 min vs the 15–30 min audio bursts) since it's
+cheap. The homelab stores the latest snapshot per device (`device_status` table) and
+shows a **Device card** on Settings: online/last-seen, battery % (+bar+voltage), WiFi +
+signal, IP, uptime, heap, firmware. **Battery % is computed server-side** from the raw
+mV via a LiPo curve (`db.lipo_pct`) so it's tunable without reflashing; the board's ÷2
+divider (R7=R8=220 kΩ) feeds VBAT→GPIO7 (**ADC1**, chosen over ADC2 which conflicts with
+WiFi). Rough voltage→% is fine for a low-battery warning; a **MAX17048 fuel gauge** is
+the v2 accuracy upgrade. Future fields worth adding: charging state (TP4056 STAT→GPIO),
+buffered-but-unsent chunk count, last-upload time, time-to-empty from the discharge slope.
+
 ### ADR-030 — Durability: rotating DB backups + logon auto-start
 **2026-06-04.** The homelab is about to be always-on, so two durability gaps close.
 (1) **Backups** (`backup.py`): a daily 3:30 AM job snapshots `listener.db` via SQLite's

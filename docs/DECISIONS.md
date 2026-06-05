@@ -5,6 +5,22 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-036 — Installable PWA + pre-hardware dashboard UX pass
+**2026-06-05.** The tailnet dashboard becomes an **installable PWA** so it lives on the
+phone like an app: web manifest (standalone, dark theme-color, headphone **SVG** icons —
+`any` + `maskable`; SVG since the box has no PNG tooling and the phone is Android/Chrome)
++ apple-mobile-web-app meta, and a **service worker** with a **network-first** strategy
+for HTML (the dashboard must stay fresh) but cache-first for static assets and a
+cached-shell fallback when the homelab is unreachable. The SW is served from **root**
+(`/sw.js` + `Service-Worker-Allowed: /`) so its scope is the whole app; the manifest is
+served as `application/manifest+json`. Rejected a cache-first/offline-first SW (would
+show stale tasks). Shipped alongside, as plain UI (no separate ADRs): nav **badges**
+(review-queue + voices-to-name counts, injected globally by `page()`), a dismissible
+**device banner** (low battery / recently-gone-quiet, off the telemetry in ADR-031),
+**bulk** review-queue add/dismiss + a batch assign form on `/unknown`, a Home **setup
+checklist**, task→conversation **backlinks** (`intents.transcript_id`), an auto-added
+**confidence chip**, and the Tuning card collapsed behind `<details>`.
+
 ### ADR-035 — Live tunables surface (dashboard-editable pipeline knobs)
 **2026-06-05.** The thresholds and limits that were buried as module constants / env
 vars are now **dashboard-editable** on a Settings "Tuning & behavior" card, each with a

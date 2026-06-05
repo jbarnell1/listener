@@ -102,7 +102,8 @@ phase docs implement it.
 
 ### Phone: minimal (no app — ADR-027)
 - ESP32 **captive-portal** for WiFi/hotspot/token provisioning (no app).
-- Homelab-served **PWA** (reached over your tailnet) for context review/edit.
+- Homelab-served **PWA** (reached over your tailnet) for context review/edit —
+  installable, standalone, with an offline app shell (ADR-036).
 - Notifications come from **Google Calendar/Tasks + the email digest** (ADR-026/024) —
   no Tasker, no Flutter (ADR-027).
 

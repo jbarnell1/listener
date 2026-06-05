@@ -12,7 +12,8 @@ at first.
 
 ### 2. Context review/edit — homelab PWA
 - Served by the homelab, reached over your **tailnet** (same VPN you already use
-  with Termius). Installable to the home screen as a PWA.
+  with Termius). **Installable** to the home screen — real PWA with manifest, icons,
+  standalone full-screen, and an offline app shell via a service worker (ADR-036).
 - Views: recent transcripts, pending/scheduled intents (edit time / dismiss),
   long-term context + people profiles.
 - **Conversational editor**: a chat box that drives an agent to edit the SQLite

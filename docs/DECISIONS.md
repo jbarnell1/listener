@@ -5,6 +5,21 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-035 — Live tunables surface (dashboard-editable pipeline knobs)
+**2026-06-05.** The thresholds and limits that were buried as module constants / env
+vars are now **dashboard-editable** on a Settings "Tuning & behavior" card, each with a
+plain-language description. Backed by a typed **meta-config layer** (`db.cfg/cfg_set/
+cfg_clear`, keys `cfg_<name>`): a dashboard override wins, else the caller's default
+(which still folds in any env var / constant), and consumers read at **runtime** — so
+changes apply with **no restart** and across the worker's subprocesses (same SQLite
+file). Exposed: auto-add (triage) + auto-complete (closure) + duplicate-similarity
+thresholds, default event length + reminder lead, audio-retention days, voice-match
+strictness (Q-S6), and the GPU gate's pause-above-util % + min-free-VRAM. Saves are
+clamped to range; a value left at default is cleared (so `meta` holds only real
+overrides) and a one-click Reset restores all. Rationale: the right values are only
+knowable against real-world data, and the user wanted to tune without code edits or
+SSH; centralizing the registry keeps the constants the single source of the defaults.
+
 ### ADR-034 — User controls: configurable brief time + Google sync shutoff valve
 **2026-06-05.** Two Settings controls give the user direct authority over the two
 "loops" that write outside the homelab. (1) The **nightly-brief send time** (ADR-024)
@@ -362,8 +377,9 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
 - *Resolved:* Q-S5 → ADR-023 (`do_not_profile` opt-out + per-person privacy delete;
   profiles stay local per ADR-016; embedding/transcript retention per ADR-021).
 - **Q-S6: Speaker-match threshold** — working default **0.40** (ECAPA cosine; same
-  speaker ≈0.5+, different <0.3). Leave as-is; finalize against real multi-speaker
-  field audio once the device is feeding live conversations.
+  speaker ≈0.5+, different <0.3). Now **dashboard-tunable** (ADR-035, "Voice-match
+  strictness") so it can be dialed against real multi-speaker field audio without a
+  code change; finalize the value once the device is feeding live conversations.
 - *Resolved:* Q-S7 → HF account + `pyannote/speaker-diarization-community-1` terms
   accepted, HF token configured (`hf auth login`). One-time setup complete.
 

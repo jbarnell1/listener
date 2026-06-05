@@ -27,11 +27,11 @@ Net networks[] = {
 const char* INGEST_SECRET = "PASTE_64_HEX_SECRET_HERE";       // grep LISTENER_INGEST_SECRET ~/.listener.env
 const char* INGEST_URL    = "https://jon-desktop.taildc59f0.ts.net:8443/ingest";
 
-// W25N01 NAND wiring — match how it's wired on your board (defaults = ADR-010).
-#define NAND_CS   10
-#define NAND_SCK  12
-#define NAND_MISO 13
-#define NAND_MOSI 11
+// W25N01 NAND wiring — from spaceteam_irl hub-schematic.md (the Hub reference board).
+#define NAND_CS   10   // CS_NAND
+#define NAND_SCK  2    // SCK / CLK
+#define NAND_MISO 11   // DO  (flash -> ESP)
+#define NAND_MOSI 1    // DI  (ESP -> flash)
 // -----------------------------------------------------------------------------
 
 static uint32_t seq = 1;

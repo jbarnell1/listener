@@ -5,6 +5,43 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-034 — User controls: configurable brief time + Google sync shutoff valve
+**2026-06-05.** Two Settings controls give the user direct authority over the two
+"loops" that write outside the homelab. (1) The **nightly-brief send time** (ADR-024)
+is now a Settings time picker, persisted in `meta.brief_time` and re-applied to the
+live APScheduler job on save (default stays 23:50). (2) A **Google-sync shutoff valve**
+(`meta.google_sync_enabled`, checked in `google_sync.sync_enabled`) — an emergency
+toggle that pauses *all* Calendar/Tasks writes **and** deletes without disconnecting
+OAuth; the email digest and dashboard/PWA keep working, and re-enabling flushes the
+backlog. Rationale: continuous capture means the system writes to the user's real
+calendar all day — they wanted a one-click "stop touching Google" that doesn't lose
+data or force a re-auth. Extends ADR-024 (does not supersede it).
+
+### ADR-033 — Confidence triage before auto-pushing to Google
+**2026-06-05.** To stop all-day capture from cluttering the real calendar, the intent
+extractor now returns a **calibrated `confidence`** per item and the homelab **gates**
+on it (`intents.TRIAGE_THRESHOLD`, 0.75): high-confidence commitments auto-push to
+Calendar/Tasks as before, while uncertain ones are stored `status='suggested'` and held
+in a dashboard **Review queue** for one-tap *Add* or dismiss — they never reach Google
+until approved. Followups (digest-only, low stakes) bypass the gate; manual adds are
+confidence 1.0. Rejected always-auto-push (a noisy day floods the calendar) and
+stage-everything (too much friction); the threshold is tunable as real-data volume is
+seen. Builds on ADR-026 (kind-based routing).
+
+### ADR-032 — Closure reconciliation (auto-complete items when heard done)
+**2026-06-05.** Each new conversation runs a **reconciliation pass**
+(`intents.reconcile_for_transcript`, a second local-LLM call) against the open items
+*before* extraction: if the talk clearly says an item was **done or cancelled**
+("I called the dentist"), tasks/followups **auto-close** and their Google item is
+deleted, while **events require a one-tap confirm** ("looks done — remove?") since
+deleting a calendar event is higher-stakes. Every auto-close is **logged with the
+heard evidence and is undoable** (undo clears the Google linkage so the next sync
+re-creates it); the reconciler must clear `CLOSE_THRESHOLD` (0.70) and is prompted to
+be conservative (re-mentions/plans don't count). Rationale: without closure, a
+continuously-recording device's task list only ever grows; conservative + logged +
+undoable guards against a mis-hear silently deleting real work. Builds on ADR-028
+(`remove_intent`) and ADR-026.
+
 ### ADR-031 — Device telemetry (status + battery)
 **2026-06-05.** The wearable periodically reports health to the homelab on a signed
 **`/telemetry`** endpoint (same HMAC scheme as `/ingest`, shared `_verify_sig`; Funnel-

@@ -32,8 +32,11 @@ ordered at JLCPCB**; LCSC + Amazon parts ordered. ~2 week lead time. See
 - faster-whisper transcription (CUDA / RTX 4070 Super)
 - **Speaker diarization + ID + relational profiling** (pyannote + ECAPA) — core,
   ADR-014: every transcript speaker-attributed; auto-cluster + dashboard labeling
-- Speaker-aware LLM intent split: SOON vs LATER → structured rows in SQLite
-- APScheduler dispatch (timed emails) + nightly daily-brief email (ADR-024)
+- Speaker-aware LLM intent split: SOON vs LATER → structured rows in SQLite, with
+  **confidence triage** (uncertain → Review queue, ADR-033) and **closure
+  reconciliation** (auto-complete/cancel heard-done items, ADR-032)
+- APScheduler nightly daily-brief email (configurable time + Google shutoff valve,
+  ADR-024/034); dated items routed to Google Calendar/Tasks (ADR-026)
 - Speaker/profile store (continuously LLM-enriched, ADR-023) + conversational MCP
   assistant (ADR-020) + PWA review dashboard
 - Milestones H1–H6 in `homelab/PIPELINE.md` (all testable with a recorded WAV)

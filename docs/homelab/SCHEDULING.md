@@ -23,9 +23,10 @@ When the intent splitter emits a `SOON` intent with `due_at`:
   sensible time-of-day) — tune later.
 
 ### Tier LATER — daily rollup
-- One recurring `cron` job at **23:50 local** builds the **daily brief** (Soon +
-  Coming up) and emails it — timed before midnight so the next-morning Google Daily
-  Brief captures it (see ADR-024; implemented in `mailer.py`, scheduled in `app.py`).
+- One recurring `cron` job at a **user-configurable time** (default **23:50 local**,
+  set in Settings — ADR-034) builds the **daily brief** (Soon + Coming up) and emails
+  it — timed before midnight so the next-morning Google Daily Brief captures it (see
+  ADR-024; implemented in `mailer.py`, scheduled/rescheduled in `app.py`).
 - **Superseded for reminders (ADR-026):** per-action `date`-job emails are dropped —
   dated intents are pushed to **Google Calendar/Tasks** (`google_sync.py`), which fire
   the actual reminders. APScheduler now only runs the nightly digest above.

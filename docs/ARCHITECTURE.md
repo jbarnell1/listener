@@ -84,12 +84,20 @@ phase docs implement it.
 - **BLE** = control/status/provisioning only, never bulk audio.
 
 ### Timeliness = scheduling, not connectivity
-- LLM extracts structured intent `{action, due_time, tier}`.
+- LLM extracts structured intent `{action, due_time, tier, confidence}`.
+- **Confidence triage** (ADR-033): high-confidence commitments auto-route below;
+  uncertain ones are held in the dashboard **Review queue** until approved, so all-day
+  capture can't clutter the real calendar.
+- **Closure reconciliation** (ADR-032): each new conversation also closes out open
+  items it resolves — tasks auto-complete (Google item deleted), events ask to confirm;
+  every auto-close is logged and undoable.
 - **Dated reminders** → pushed to **Google Calendar (events) / Tasks (to-dos)** so
   Google fires the reminder at the right time across devices, even if the homelab is
-  asleep; Gemini reads them natively (see ADR-026).
-- **Undated follow-ups** → the nightly **daily brief** email (23:50 local, captured by
-  the next-morning Google Daily Brief; ADR-024). Dated items also appear as a heads-up.
+  asleep; Gemini reads them natively (see ADR-026). A Settings **shutoff valve**
+  (ADR-034) can pause all Google writes without disconnecting.
+- **Undated follow-ups** → the nightly **daily brief** email (default 23:50 local,
+  configurable in Settings — ADR-034/024, captured by the next-morning Google Daily
+  Brief). Dated items also appear as a heads-up.
 - This decouples reminder delivery from our box being awake at reminder time.
 
 ### Phone: minimal (no app — ADR-027)

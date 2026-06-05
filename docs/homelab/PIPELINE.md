@@ -47,7 +47,10 @@ profiles(speaker_id, summary, emotion_trend(=transient mood), traits_json, inter
          dislikes_json, dates_json, notable_json, last_seen, interaction_count, updated_at)
                   -- personality/relational profile, ADR-023 (durable fields + transient mood)
 intents(id, segment_id, speaker_id, action, kind, tier, due_at, status, source_quote,
-        calendar_event_id, calendar_link, gtask_id, synced_at)  -- kind/Google sync ADR-026
+        calendar_event_id, calendar_link, gtask_id, synced_at,  -- kind/Google sync ADR-026
+        confidence,                                             -- triage gate, ADR-033
+        close_suggested, close_kind, close_note, closed_at)     -- closure reconciliation, ADR-032
+        -- status: pending | suggested (Review queue, ADR-033) | dismissed
 tags(id, name, summary, ...)  +  transcript_tags(transcript_id, tag_id)  -- topics, ADR-029
 schedule_jobs(...)   -- APScheduler's own job store table
 ```
@@ -92,7 +95,7 @@ schedule_jobs(...)   -- APScheduler's own job store table
 - Immediate emails: terse subject with a stable tag (e.g. `[ACTION] trash 7PM`),
   body with the single action + source quote + time, to maximize Workspace/Gemini
   pickup accuracy.
-- Nightly **daily brief** (23:50 local): grouped sections (Soon, Coming up); text +
+- Nightly **daily brief** (default 23:50 local, configurable — ADR-034): grouped sections (Soon, Coming up); text +
   HTML. Timed before midnight so the next-morning Google Daily Brief captures it.
 - Transport = local SMTP + Gmail App Password (see ADR-024); `mailer.py`.
 
@@ -105,7 +108,7 @@ schedule_jobs(...)   -- APScheduler's own job store table
 | **H3.5** | **pyannote diarization** → speaker-attributed `segments` |
 | **H3.6** | **ECAPA embeddings + ID/cluster** → `speakers`/`embeddings`; profiles |
 | H4 | **Speaker-aware** LLM intent split → `intents` (+ profile_updates) |
-| H5 | APScheduler → nightly 23:50 daily brief over SMTP (ADR-024); per-action timed email next |
+| H5 | APScheduler → nightly daily brief over SMTP (default 23:50, configurable ADR-034; ADR-024) |
 | H6 | PWA dashboard — label unknown clusters, review profiles, conversational editor |
 - H1→H5 prove the whole transcribe→diarize→ID→split→schedule→email flow before any
   board arrives (all testable with a recorded WAV).

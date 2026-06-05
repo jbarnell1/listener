@@ -13,6 +13,8 @@ import os
 import subprocess
 import time
 
+import db
+
 # Utilization is the real "is a game rendering" signal. Free-VRAM is only an
 # OOM guard: this box's baseline (Windows desktop + a resident Ollama model the
 # pipeline itself uses ≈ 5–6 GB) already leaves <6 GB free with NO game running,
@@ -21,6 +23,16 @@ FREE_MIN_MIB = int(os.environ.get("LISTENER_GPU_FREE_MIN_MIB", "3072"))   # ~3 G
 UTIL_MAX_PCT = int(os.environ.get("LISTENER_GPU_UTIL_MAX", "40"))         # game = sustained high util
 SAMPLES = 3
 SAMPLE_GAP = 1.5
+
+
+def _limits():
+    """Live (free_min_mib, util_max_pct) — dashboard override wins, else env/const."""
+    try:
+        c = db.connect()
+        return (db.cfg(c, "gpu_free_min_mib", FREE_MIN_MIB),
+                db.cfg(c, "gpu_util_max", UTIL_MAX_PCT))
+    except Exception:  # noqa: BLE001 — never let a config read break the gate
+        return FREE_MIN_MIB, UTIL_MAX_PCT
 
 # Windows nvidia-smi.exe is on the WSL-appended PATH (System32). Fall back to the
 # common install path if PATH lookup fails.
@@ -56,10 +68,11 @@ def status():
                 time.sleep(SAMPLE_GAP)
     except Exception as e:  # noqa: BLE001
         return True, f"gate unavailable ({e}); proceeding"
+    free_min, util_max = _limits()
     free, util = min(frees), max(utils)          # worst-case across the window
-    clear = free >= FREE_MIN_MIB and util <= UTIL_MAX_PCT
+    clear = free >= free_min and util <= util_max
     detail = (f"free={free}MiB util={util}% "
-              f"(need ≥{FREE_MIN_MIB}MiB & ≤{UTIL_MAX_PCT}%)")
+              f"(need ≥{free_min}MiB & ≤{util_max}%)")
     return clear, detail
 
 
@@ -69,7 +82,8 @@ def peek():
         free, util = _sample()
     except Exception as e:  # noqa: BLE001
         return True, f"gate unavailable ({e})"
-    clear = free >= FREE_MIN_MIB and util <= UTIL_MAX_PCT
+    free_min, util_max = _limits()
+    clear = free >= free_min and util <= util_max
     return clear, f"free={free}MiB · util={util}%"
 
 

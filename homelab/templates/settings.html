@@ -162,6 +162,40 @@
 </div>
 
 <div class="card">
+  <h2>⚙️ Tuning &amp; behavior</h2>
+  <p class="muted" style="margin:0 0 4px">Live knobs — changes apply immediately, no restart.
+  Leave at default unless something feels off; each shows its built-in default.</p>
+  <form method="post" action="/settings/tuning">
+    {% for group, knobs in tuning %}
+    <div class="sec" style="font-size:.9rem;margin:14px 2px 2px">{{ group }}</div>
+    {% for k in knobs %}
+    <div class="row" style="align-items:flex-start">
+      <div class="grow">
+        <div class="name">{{ k.label }}
+          {% if not k.is_default %}<span class="chip unk" style="font-size:.6rem;padding:1px 7px">changed</span>{% endif %}
+        </div>
+        <div class="muted" style="font-size:.76rem;margin-top:2px">{{ k.help }}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:none">
+        <div style="display:flex;align-items:center;gap:5px">
+          <input type="number" name="{{ k.key }}" value="{{ k.value }}"
+                 min="{{ k.min }}" max="{{ k.max }}" step="{{ k.step }}"
+                 style="width:82px;text-align:right">
+          {% if k.unit %}<span class="muted" style="min-width:28px">{{ k.unit }}</span>{% endif %}
+        </div>
+        <span class="muted" style="font-size:.64rem">default {{ k.default }}{{ k.unit }}</span>
+      </div>
+    </div>
+    {% endfor %}
+    {% endfor %}
+    <div class="field" style="margin-top:14px">
+      <button class="btn">Save tuning</button>
+      <button class="btn ghost" formaction="/settings/tuning/reset">Reset all to defaults</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
   <h2>Privacy</h2>
   <p class="muted" style="margin:0">All audio, transcripts, voiceprints, and the assistant
   run <b>locally</b> on this machine. The dashboard is reachable only over your Tailscale

@@ -120,13 +120,15 @@ def _local_date(iso):
         return None
 
 
-def find_duplicate(conn, action, due_iso):
+def find_duplicate(conn, action, due_iso, threshold=None):
     """Is there already an OPEN intent for the same thing? Same day-bucket (or both
     undated) + similar action text. Different day = distinct (e.g. weekly trash)."""
+    if threshold is None:
+        threshold = db.cfg(conn, "dedupe_similarity", SIM_THRESHOLD)
     bucket = _local_date(due_iso)
     for r in conn.execute(
             "SELECT id, action, due_at FROM intents WHERE status != 'dismissed'").fetchall():
-        if _local_date(r["due_at"]) == bucket and _sim(action, r["action"]) >= SIM_THRESHOLD:
+        if _local_date(r["due_at"]) == bucket and _sim(action, r["action"]) >= threshold:
             return r["id"]
     return None
 
@@ -181,11 +183,13 @@ def run_for_transcript(conn, tid, verbose=False):
     raw = ollama_chat(system, convo)
     data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
     intents = data.get("intents", [])
+    triage_thr = db.cfg(conn, "triage_threshold", TRIAGE_THRESHOLD)
+    sim_thr = db.cfg(conn, "dedupe_similarity", SIM_THRESHOLD)
     stored = []
     for it in intents:
         due = to_utc(it.get("due_local"), it.get("due_text"), now_local)
         due_iso = due.isoformat() if due else None
-        if find_duplicate(conn, it.get("action"), due_iso):    # already tracked → skip
+        if find_duplicate(conn, it.get("action"), due_iso, sim_thr):  # already tracked → skip
             if verbose:
                 print(f"  (dup, skipped) {it.get('action')}")
             continue
@@ -199,7 +203,7 @@ def run_for_transcript(conn, tid, verbose=False):
         # Triage (ADR-033): followups only ever hit the digest (low stakes), so they
         # flow straight through. Everything else is gated — uncertain items are held
         # as "suggested" for the Review queue instead of auto-pushed to Google.
-        status = ("pending" if kind == "followup" or conf is None or conf >= TRIAGE_THRESHOLD
+        status = ("pending" if kind == "followup" or conf is None or conf >= triage_thr
                   else "suggested")
         conn.execute(
             "INSERT INTO intents(speaker_id, action, kind, tier, due_at, status, "
@@ -257,6 +261,7 @@ def reconcile_for_transcript(conn, tid, verbose=False):
         return []
 
     import google_sync
+    close_thr = db.cfg(conn, "close_threshold", CLOSE_THRESHOLD)
     by_id = {r["id"]: r for r in open_items}
     acted = []
     for res in data.get("resolved", []):
@@ -268,7 +273,7 @@ def reconcile_for_transcript(conn, tid, verbose=False):
         except (TypeError, ValueError):
             conf = 0.0
         resolution = (res.get("resolution") or "completed").lower()
-        if conf < CLOSE_THRESHOLD or resolution not in ("completed", "cancelled"):
+        if conf < close_thr or resolution not in ("completed", "cancelled"):
             continue
         iid, kind = item["id"], (item["kind"] or "task").lower()
         note = (res.get("evidence") or "")[:300]

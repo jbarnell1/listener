@@ -91,15 +91,17 @@ def _svc(name, version, creds):
     return build(name, version, credentials=creds, cache_discovery=False)
 
 
-def create_event(creds, summary, due_utc_iso, description=""):
+def create_event(creds, summary, due_utc_iso, description="", duration_min=None, remind_min=None):
+    duration_min = EVENT_HOURS * 60 if duration_min is None else duration_min
+    remind_min = REMIND_MIN if remind_min is None else remind_min
     start = datetime.fromisoformat(due_utc_iso).astimezone(TZ)
-    end = start + timedelta(hours=EVENT_HOURS)
+    end = start + timedelta(minutes=duration_min)
     body = {
         "summary": summary, "description": description,
         "start": {"dateTime": start.isoformat(), "timeZone": TZ_NAME},
         "end": {"dateTime": end.isoformat(), "timeZone": TZ_NAME},
         "reminders": {"useDefault": False,
-                      "overrides": [{"method": "popup", "minutes": REMIND_MIN}]},
+                      "overrides": [{"method": "popup", "minutes": remind_min}]},
     }
     ev = _svc("calendar", "v3", creds).events().insert(calendarId="primary", body=body).execute()
     return ev["id"], ev.get("htmlLink")
@@ -161,13 +163,16 @@ def sync_pending(conn, verbose=False):
         if verbose:
             print("google: not connected — run `python google_sync.py --auth`")
         return {"connected": False, "synced": 0}
+    dur = db.cfg(conn, "event_duration_min", EVENT_HOURS * 60)
+    rem = db.cfg(conn, "event_reminder_min", REMIND_MIN)
     n = 0
     for it in db.unsynced_intents(conn):
         kind = (it["kind"] or "task").lower()
         desc = f'Listener · {it["who"]}: "{it["source_quote"] or ""}"'
         try:
             if kind == "event" and it["due_at"]:
-                eid, link = create_event(creds, it["action"], it["due_at"], desc)
+                eid, link = create_event(creds, it["action"], it["due_at"], desc,
+                                         duration_min=dur, remind_min=rem)
                 db.mark_intent_synced(conn, it["id"], calendar_event_id=eid, calendar_link=link)
             elif kind == "followup":
                 db.mark_intent_synced(conn, it["id"])          # digest-only

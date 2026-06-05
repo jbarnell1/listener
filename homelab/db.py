@@ -379,6 +379,30 @@ def meta_set(conn, key, value):
     conn.commit()
 
 
+# --- live tunables (meta-backed, dashboard-editable; ADR-035) ---
+# Precedence: a dashboard override (meta `cfg_<key>`) wins; else the caller's
+# `default` (which already folds in any env var / module constant). Every consumer
+# reads these at runtime, so changes take effect with no restart, across processes.
+
+def cfg(conn, key, default):
+    raw = meta_get(conn, "cfg_" + key)
+    if raw is None:
+        return default
+    try:
+        return type(default)(raw)        # cast to match the default's type (float/int)
+    except (ValueError, TypeError):
+        return default
+
+
+def cfg_set(conn, key, value):
+    meta_set(conn, "cfg_" + key, value)
+
+
+def cfg_clear(conn, key):
+    conn.execute("DELETE FROM meta WHERE key=?", ("cfg_" + key,))
+    conn.commit()
+
+
 def activity_count(conn, since):
     """How many new conversations + action items since `since` (for the nav badge)."""
     return conn.execute(

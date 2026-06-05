@@ -13,13 +13,18 @@ import os
 import sys
 import time
 
+import db
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 CHUNK_DIR = os.path.join(HERE, "data", "chunks")
 RETAIN_DAYS = int(os.environ.get("LISTENER_AUDIO_RETAIN_DAYS", "30"))
 
 
-def purge_old_audio(days=RETAIN_DAYS, chunk_dir=CHUNK_DIR, dry_run=False):
-    """Remove audio files older than `days`. Returns {removed, bytes_freed}."""
+def purge_old_audio(days=None, chunk_dir=CHUNK_DIR, dry_run=False):
+    """Remove audio files older than `days` (defaults to the dashboard-tunable
+    retention setting — ADR-035). Returns {removed, bytes_freed}."""
+    if days is None:
+        days = db.cfg(db.connect(), "audio_retain_days", RETAIN_DAYS)
     cutoff = time.time() - days * 86400
     removed, freed = 0, 0
     if os.path.isdir(chunk_dir):
@@ -39,7 +44,7 @@ def purge_old_audio(days=RETAIN_DAYS, chunk_dir=CHUNK_DIR, dry_run=False):
 
 
 def main():
-    days = RETAIN_DAYS
+    days = None                       # None → use the dashboard-tunable retention
     if "--days" in sys.argv:
         days = int(sys.argv[sys.argv.index("--days") + 1])
     purge_old_audio(days=days, dry_run="--dry-run" in sys.argv)

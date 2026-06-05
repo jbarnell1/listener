@@ -115,11 +115,14 @@ class SpeakerDB:
         self.conn.commit()
         return sid
 
-    def identify(self, emb: np.ndarray, threshold: float = MATCH_THRESHOLD,
+    def identify(self, emb: np.ndarray, threshold: float = None,
                  create_unknown: bool = True):
         """Return (label, score, speaker_id). Persistently clusters unknowns: a
         non-matching voice becomes a new 'unknown' speaker, so the SAME voice in a
-        later recording matches the SAME Unknown_N (label it later → recognized)."""
+        later recording matches the SAME Unknown_N (label it later → recognized).
+        `threshold` defaults to the dashboard-tunable voice-match setting (ADR-035)."""
+        if threshold is None:
+            threshold = db.cfg(self.conn, "voice_match_threshold", MATCH_THRESHOLD)
         best = (None, None, -1.0)  # (sid, name, score)
         for r in self._centroids():
             c = cosine(emb, _from_blob(r["vec"]))

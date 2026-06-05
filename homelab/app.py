@@ -121,6 +121,69 @@ def _fmt_hm(h, m):
     return f"{h % 12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
 
 
+# Dashboard-tunable knobs (ADR-035). Defaults come from each module's constant so
+# there's a single source of truth; the consumers read db.cfg(...) at runtime.
+# (voice_match_threshold's default is mirrored here — speakerid.py can't be imported
+# in the light web venv, but its MATCH_THRESHOLD is the same 0.40.)
+TUNABLES = [
+    ("Task intelligence", [
+        {"key": "triage_threshold", "label": "Auto-add confidence", "default": intents.TRIAGE_THRESHOLD,
+         "min": 0.3, "max": 1.0, "step": 0.05, "unit": "",
+         "help": "How sure the AI must be before an item goes straight to your Calendar/Tasks. "
+                 "Below this it waits in the Review queue. Higher = more held for review."},
+        {"key": "close_threshold", "label": "Auto-complete confidence", "default": intents.CLOSE_THRESHOLD,
+         "min": 0.3, "max": 1.0, "step": 0.05, "unit": "",
+         "help": "How sure the AI must be that it heard a task finished before closing it out. "
+                 "Higher = more cautious (fewer auto-completes)."},
+        {"key": "dedupe_similarity", "label": "Duplicate sensitivity", "default": intents.SIM_THRESHOLD,
+         "min": 0.5, "max": 1.0, "step": 0.02, "unit": "",
+         "help": "How alike two tasks (same day) must be to count as the same thing. "
+                 "Lower = merges more eagerly; higher = keeps near-duplicates separate."},
+    ]),
+    ("Calendar", [
+        {"key": "event_duration_min", "label": "Default event length", "default": google_sync.EVENT_HOURS * 60,
+         "min": 15, "max": 480, "step": 15, "unit": "min",
+         "help": "Length of a calendar event when no end time is mentioned."},
+        {"key": "event_reminder_min", "label": "Reminder lead time", "default": google_sync.REMIND_MIN,
+         "min": 0, "max": 120, "step": 5, "unit": "min",
+         "help": "How long before an event Google pops its reminder."},
+    ]),
+    ("Privacy & people", [
+        {"key": "audio_retain_days", "label": "Audio retention", "default": purge.RETAIN_DAYS,
+         "min": 1, "max": 365, "step": 1, "unit": "days",
+         "help": "Days before recorded audio auto-deletes. Transcripts, profiles, and search are "
+                 "always kept — only the playable audio is purged."},
+        {"key": "voice_match_threshold", "label": "Voice-match strictness", "default": 0.40,
+         "min": 0.2, "max": 0.8, "step": 0.02, "unit": "",
+         "help": "How closely a voice must match an enrolled person to be tagged as them. Higher = "
+                 "stricter (more new 'unknowns' to name); lower = more eager. New recordings only."},
+    ]),
+    ("Performance (gaming)", [
+        {"key": "gpu_util_max", "label": "Pause above GPU load", "default": gpu_gate.UTIL_MAX_PCT,
+         "min": 10, "max": 95, "step": 5, "unit": "%",
+         "help": "Heavy processing pauses while the GPU is busier than this, so transcription "
+                 "never fights a game for the card."},
+        {"key": "gpu_free_min_mib", "label": "Min free VRAM", "default": gpu_gate.FREE_MIN_MIB,
+         "min": 512, "max": 12000, "step": 256, "unit": "MB",
+         "help": "Also pause if free VRAM drops below this (OOM guard). Advanced — leave as-is "
+                 "unless you hit out-of-memory errors."},
+    ]),
+]
+_TUNABLE_BY_KEY = {k["key"]: k for _, ks in TUNABLES for k in ks}
+
+
+def _tuning_view(c):
+    """Current value (+ whether it's the default) for each knob, grouped for the UI."""
+    out = []
+    for group, knobs in TUNABLES:
+        items = []
+        for k in knobs:
+            val = db.cfg(c, k["key"], k["default"])
+            items.append({**k, "value": val, "is_default": val == k["default"]})
+        out.append((group, items))
+    return out
+
+
 def _worker_status():
     try:
         with open("/tmp/listener-worker.json") as f:
@@ -614,7 +677,8 @@ def settings(request: Request, mail: str = ""):
                 mail_configured=mailer.configured(),
                 mail_to=(os.environ.get("LISTENER_MAIL_TO")
                          or os.environ.get("LISTENER_SMTP_USER") or "—"),
-                brief_time=_fmt_hm(bh, bm), brief_time_val=f"{bh:02d}:{bm:02d}")
+                brief_time=_fmt_hm(bh, bm), brief_time_val=f"{bh:02d}:{bm:02d}",
+                tuning=_tuning_view(c))
 
 
 @app.post("/settings/brief-time")
@@ -627,6 +691,35 @@ def set_brief_time(t: str = Form("")):
             _schedule_brief()
     except (ValueError, TypeError):
         pass
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/settings/tuning")
+async def save_tuning(request: Request):
+    """Persist dashboard-edited tunables (ADR-035). Values at the default are cleared
+    so `meta` only holds genuine overrides; everything is clamped to its range."""
+    form = await request.form()
+    c = db.connect()
+    for key, spec in _TUNABLE_BY_KEY.items():
+        if key not in form:
+            continue
+        try:
+            val = type(spec["default"])(form[key])
+        except (ValueError, TypeError):
+            continue
+        val = max(spec["min"], min(spec["max"], val))      # clamp into range
+        if val == spec["default"]:
+            db.cfg_clear(c, key)
+        else:
+            db.cfg_set(c, key, val)
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/settings/tuning/reset")
+def reset_tuning():
+    c = db.connect()
+    for key in _TUNABLE_BY_KEY:
+        db.cfg_clear(c, key)
     return RedirectResponse("/settings", status_code=303)
 
 

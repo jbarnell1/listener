@@ -23,6 +23,7 @@ from fastapi import FastAPI, Form, Header, HTTPException, Query, Request, Respon
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.requests import ClientDisconnect
 
 import assistant
 import backup
@@ -569,7 +570,12 @@ def segment_audio(seg_id: int):
 @app.post("/ingest")
 async def ingest(request: Request, x_sig: str = Header(""),
                  x_ts: str = Header(""), x_seq: str = Header("0")):
-    body = await request.body()
+    try:
+        body = await request.body()
+    except ClientDisconnect:                  # device/Funnel dropped mid-upload — not an error
+        raise HTTPException(400, "client disconnected")
+    if len(body) > 25 * 1024 * 1024:          # size cap on the public endpoint
+        raise HTTPException(413, "too large")
     try:
         ts = int(x_ts)
     except ValueError:

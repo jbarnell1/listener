@@ -25,6 +25,12 @@ UTC = ZoneInfo("UTC")
 OLLAMA = "http://127.0.0.1:11434/api/chat"
 MODEL = "qwen3:8b"
 
+# Confidence triage (ADR-033): a new item below TRIAGE_THRESHOLD is "suggested"
+# (held in the dashboard Review queue) instead of auto-pushed to Google. The
+# reconciler (ADR-032) must be at least CLOSE_THRESHOLD sure before it acts.
+TRIAGE_THRESHOLD = 0.75
+CLOSE_THRESHOLD = 0.70
+
 SYSTEM = """You extract action items and follow-ups from a conversation transcript.
 Return ONLY JSON: {"intents":[{"action": str, "kind": "event"|"task"|"followup",
 "tier": "SOON"|"LATER", "speaker": str, "due_text": str|null, "due_local": str|null,
@@ -45,6 +51,10 @@ Rules:
   due_local as ISO 8601 like 2026-06-03T19:00. Do NOT convert to UTC. No time → null.
 - Capture real action items, commitments, and notable follow-ups. None → {"intents":[]}.
 - speaker = who said it, using the transcript's speaker labels.
+- confidence (0-1) = how sure you are this is a REAL, intended commitment or plan
+  (not a casual hypothetical, joke, or passing aside). A firm explicit task/plan is
+  ~0.9+; "we should maybe sometime…" is ~0.4. Be calibrated — this gates whether it
+  is auto-added to the calendar or held for the person to confirm.
 """
 
 DEMO = """Sarah: Hey, can you take out the trash tonight? Pickup is early tomorrow.
@@ -181,11 +191,21 @@ def run_for_transcript(conn, tid, verbose=False):
             continue
         sp = conn.execute("SELECT id FROM speakers WHERE name=?",
                           (it.get("speaker"),)).fetchone()
+        try:
+            conf = float(it.get("confidence"))
+        except (TypeError, ValueError):
+            conf = None
+        kind = (it.get("kind") or "task").lower()
+        # Triage (ADR-033): followups only ever hit the digest (low stakes), so they
+        # flow straight through. Everything else is gated — uncertain items are held
+        # as "suggested" for the Review queue instead of auto-pushed to Google.
+        status = ("pending" if kind == "followup" or conf is None or conf >= TRIAGE_THRESHOLD
+                  else "suggested")
         conn.execute(
-            "INSERT INTO intents(speaker_id, action, kind, tier, due_at, status, source_quote)"
-            " VALUES (?,?,?,?,?, 'pending', ?)",
-            (sp["id"] if sp else None, it.get("action"), it.get("kind"), it.get("tier"),
-             due_iso, it.get("source_quote")))
+            "INSERT INTO intents(speaker_id, action, kind, tier, due_at, status, "
+            "source_quote, confidence) VALUES (?,?,?,?,?,?,?,?)",
+            (sp["id"] if sp else None, it.get("action"), kind, it.get("tier"),
+             due_iso, status, it.get("source_quote"), conf))
         stored.append(it)
         if verbose:
             due_str = due.strftime("%Y-%m-%d %H:%M UTC") if due else "(no time)"
@@ -193,6 +213,78 @@ def run_for_transcript(conn, tid, verbose=False):
                   f"({it.get('speaker')}, due {due_str})")
     conn.commit()
     return stored
+
+
+RECONCILE_SYSTEM = """You decide whether a new conversation RESOLVES any of a
+person's currently-open action items (marks them done or cancelled).
+
+You are given (1) a numbered list of their open tasks/events and (2) a recent
+conversation. An item is resolved ONLY if the conversation clearly indicates it
+ALREADY HAPPENED or was CALLED OFF — not if it is merely mentioned, planned, or
+restated.
+
+Return ONLY JSON: {"resolved":[{"id": int, "resolution": "completed"|"cancelled",
+"evidence": str, "confidence": number}]}.
+- id MUST be one of the listed item ids.
+- "completed" = it was done / it occurred ("I called the dentist", "we already had
+  dinner with your parents", "trash is out").
+- "cancelled" = called off / no longer happening ("we cancelled Saturday", "pickup
+  got skipped this week").
+- evidence = the short quote that shows it.
+- confidence (0-1) = how sure you are. Be conservative: when it is only being
+  re-mentioned, planned, or you are unsure, leave it OUT.
+- Nothing resolved → {"resolved":[]}."""
+
+
+def reconcile_for_transcript(conn, tid, verbose=False):
+    """Close out open items a new conversation resolves (ADR-032). Tasks/followups
+    auto-close (and their Google item is deleted); events are flagged for the user
+    to confirm before anything is removed. Returns the list acted on."""
+    open_items = db.open_intents_for_reconcile(conn)
+    if not open_items:
+        return []
+    listing = "\n".join(
+        f'{r["id"]}. [{(r["kind"] or "task")}] {r["action"]}'
+        + (f' (due {r["due_at"]})' if r["due_at"] else "")
+        for r in open_items)
+    convo = conversation_for(tid)
+    try:
+        raw = ollama_chat(RECONCILE_SYSTEM, f"OPEN ITEMS:\n{listing}\n\nNEW CONVERSATION:\n{convo}")
+        data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
+    except Exception as e:  # noqa: BLE001 — reconciliation must never fail the chunk
+        if verbose:
+            print(f"reconcile: skipped ({e})")
+        return []
+
+    import google_sync
+    by_id = {r["id"]: r for r in open_items}
+    acted = []
+    for res in data.get("resolved", []):
+        item = by_id.get(res.get("id"))
+        if not item:
+            continue
+        try:
+            conf = float(res.get("confidence"))
+        except (TypeError, ValueError):
+            conf = 0.0
+        resolution = (res.get("resolution") or "completed").lower()
+        if conf < CLOSE_THRESHOLD or resolution not in ("completed", "cancelled"):
+            continue
+        iid, kind = item["id"], (item["kind"] or "task").lower()
+        note = (res.get("evidence") or "")[:300]
+        if kind == "event":                       # high-stakes → confirm before deleting
+            db.suggest_close(conn, iid, resolution, note)
+        else:                                     # task/followup → auto-close + delete
+            try:
+                google_sync.remove_intent(conn, iid)
+            except Exception as e:  # noqa: BLE001
+                print(f"reconcile: google remove failed for {iid}: {e}")
+            db.close_intent(conn, iid, kind=resolution, note=note)
+        acted.append({"id": iid, "kind": kind, "resolution": resolution, "action": item["action"]})
+        if verbose:
+            tag = f"{resolution}?" if kind == "event" else resolution
+            print(f"  reconcile [{kind}] #{iid} {tag} ({conf:.2f}) — {item['action']}")
+    return acted
 
 
 def add_manual(conn, text):
@@ -216,8 +308,8 @@ def add_manual(conn, text):
         print(f"add_manual parse failed: {e}")
     sp = db.get_self(conn)
     cur = conn.execute(
-        "INSERT INTO intents(speaker_id, action, kind, tier, due_at, status, source_quote) "
-        "VALUES (?,?,?,?,?, 'pending', ?)",
+        "INSERT INTO intents(speaker_id, action, kind, tier, due_at, status, "
+        "source_quote, confidence) VALUES (?,?,?,?,?, 'pending', ?, 1.0)",
         (sp["id"] if sp else None, action, kind, tier, due_iso, text))
     conn.commit()
     return cur.lastrowid
@@ -238,6 +330,9 @@ def main():
             "SELECT MAX(id) FROM transcripts").fetchone()[0]
 
     print(f"--- conversation ---\n{conversation_for(tid)}\n", flush=True)
+    print(f"--- reconciling open items with {MODEL} ---", flush=True)
+    closed = reconcile_for_transcript(conn, tid, verbose=True)
+    print(f"reconciled {len(closed)} open item(s)")
     print(f"--- extracting with {MODEL} ---", flush=True)
     intents = run_for_transcript(conn, tid, verbose=True)
     print(f"\nstored {len(intents)} intent(s) for transcript #{tid} -> listener.db")

@@ -107,12 +107,19 @@
     </div>
   </div>
   {% if mail_configured %}
-  <div class="field" style="margin-top:12px">
+  <div class="field" style="margin-top:12px;flex-wrap:wrap;gap:8px">
     <form method="post" action="/settings/mail/test"><button class="btn">Send test email</button></form>
+    <form method="post" action="/settings/brief-time" style="display:flex;align-items:center;gap:8px">
+      <label class="muted" for="brief-time">Send at</label>
+      <input type="time" id="brief-time" name="t" value="{{ brief_time_val }}" required
+             style="width:auto">
+      <button class="btn ghost">Save time</button>
+    </form>
   </div>
   {% endif %}
-  <p class="muted" style="margin:.8em 0 0">The brief lands before midnight so the next
-  morning's Google Daily Brief picks it up. Credentials live only in WSL — never committed.</p>
+  <p class="muted" style="margin:.8em 0 0">Currently <b>{{ brief_time }}</b> local. Keep it before
+  midnight so the next morning's Google Daily Brief picks it up. Credentials live only in WSL —
+  never committed.</p>
 </div>
 
 <div class="card">
@@ -122,12 +129,29 @@
     <div class="grow">
       <div class="name">Status:
         {% if google.connected %}<span class="chip good">connected</span>
+          {% if google_paused %}<span class="chip unk">⏸ paused</span>
+          {% else %}<span class="chip good">syncing</span>{% endif %}
         {% else %}<span class="chip unk">not connected</span>{% endif %}
       </div>
       <div class="muted">events → Calendar · to-dos → Tasks · undated → email digest</div>
     </div>
   </div>
-  {% if not google.connected %}
+  {% if google.connected %}
+  <div class="field" style="margin-top:12px">
+    <form method="post" action="/settings/google/toggle">
+      <button class="btn {{ 'ghost' if not google_paused else '' }}">
+        {{ 'Resume Google sync' if google_paused else 'Pause Google sync' }}</button>
+    </form>
+  </div>
+  {% if google_paused %}
+  <p class="muted" style="margin:.7em 0 0;color:var(--warn)">⏸ <b>Shutoff valve engaged.</b>
+    New items still reach your <b>email digest</b> and this dashboard, but nothing is pushed to
+    — or removed from — Google Calendar/Tasks until you resume. Resuming flushes the backlog.</p>
+  {% else %}
+  <p class="muted" style="margin:.7em 0 0">Emergency shutoff: pause to stop Listener writing to
+    your real calendar without disconnecting — email + dashboard keep working.</p>
+  {% endif %}
+  {% else %}
   <p class="muted" style="margin:.7em 0 0">
     {% if google.client_secret %}OAuth client present — run
     <code>python google_sync.py --auth</code> in WSL once to authorize.

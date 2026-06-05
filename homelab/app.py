@@ -95,7 +95,30 @@ class WorkerManager:
 mcp_mgr = MCPManager()
 worker_mgr = WorkerManager()
 scheduler = AsyncIOScheduler(timezone=ZoneInfo("America/Chicago"))
-BRIEF_HOUR, BRIEF_MIN = 23, 50   # 11:50 PM local — lands before midnight (ADR-024)
+BRIEF_HOUR, BRIEF_MIN = 23, 50   # default — 11:50 PM local, lands before midnight (ADR-024)
+
+
+def _brief_hm(c=None):
+    """The nightly-brief send time (h, m), user-configurable via meta (ADR-034)."""
+    raw = db.meta_get(c or db.connect(), "brief_time", f"{BRIEF_HOUR:02d}:{BRIEF_MIN:02d}")
+    try:
+        h, m = (int(x) for x in str(raw).split(":")[:2])
+        if 0 <= h < 24 and 0 <= m < 60:
+            return h, m
+    except (ValueError, TypeError):
+        pass
+    return BRIEF_HOUR, BRIEF_MIN
+
+
+def _schedule_brief():
+    """(Re)install the daily-brief cron job at the configured time."""
+    h, m = _brief_hm()
+    scheduler.add_job(mailer.send_daily_brief, CronTrigger(hour=h, minute=m),
+                      id="daily_brief", replace_existing=True, misfire_grace_time=3600)
+
+
+def _fmt_hm(h, m):
+    return f"{h % 12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
 
 
 def _worker_status():
@@ -111,9 +134,7 @@ async def lifespan(_app):
     db.init_db()          # ensure schema + run idempotent migrations
     mcp_mgr.start()       # MCP server for the assistant
     worker_mgr.start()    # pipeline worker draining the ingest queue
-    scheduler.add_job(mailer.send_daily_brief,
-                      CronTrigger(hour=BRIEF_HOUR, minute=BRIEF_MIN),
-                      id="daily_brief", replace_existing=True, misfire_grace_time=3600)
+    _schedule_brief()     # nightly brief at the user-configured time (ADR-034)
     scheduler.add_job(purge.purge_old_audio, CronTrigger(hour=3, minute=0),
                       id="audio_purge", replace_existing=True, misfire_grace_time=7200)
     scheduler.add_job(backup.make_backup, CronTrigger(hour=3, minute=30),
@@ -242,6 +263,8 @@ def home(request: Request):
                 greeting=greeting, task_groups=_task_groups(allopen), open_count=len(allopen),
                 review=_review_nudges(c), unknowns=unknowns, samples=samples,
                 enrolled=db.enrolled_speakers(c), transcripts=recents,
+                suggested=db.suggested_intents(c), close_pending=db.close_pending_intents(c),
+                auto_closed=db.recent_auto_closed(c),
                 rec_tags={r["id"]: db.transcript_tag_list(c, r["id"]) for r in recents})
 
 
@@ -462,7 +485,9 @@ def unknown(request: Request):
 def tasks(request: Request):
     c = db.connect()
     return page("tasks.html", request, active="tasks",
-                soon=db.list_intents(c, "SOON"), later=db.list_intents(c, "LATER"))
+                soon=db.list_intents(c, "SOON"), later=db.list_intents(c, "LATER"),
+                suggested=db.suggested_intents(c), close_pending=db.close_pending_intents(c),
+                auto_closed=db.recent_auto_closed(c))
 
 
 @app.post("/tasks/{iid}/dismiss")
@@ -473,6 +498,54 @@ def dismiss(request: Request, iid: int):
     if _hx(request):
         return HTMLResponse("")  # HTMX removes the row
     return RedirectResponse("/tasks", status_code=303)
+
+
+@app.post("/tasks/{iid}/approve")
+def approve_task(request: Request, iid: int):
+    """Promote a triaged 'suggested' item to active → it then pushes to Google."""
+    c = db.connect()
+    db.approve_intent(c, iid)
+    try:
+        google_sync.sync_pending(c)
+    except Exception:  # noqa: BLE001
+        pass
+    if _hx(request):
+        return HTMLResponse("")
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/tasks/{iid}/confirm-close")
+def confirm_close_task(request: Request, iid: int):
+    """User confirmed a suggested closure (events) → remove from Google + close out."""
+    c = db.connect()
+    google_sync.remove_intent(c, iid)
+    db.close_intent(c, iid)                  # close_kind/note were set by the reconciler
+    if _hx(request):
+        return HTMLResponse("")
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/tasks/{iid}/keep")
+def keep_task(request: Request, iid: int):
+    """User rejected a suggested closure — keep the item active."""
+    db.keep_open(db.connect(), iid)
+    if _hx(request):
+        return HTMLResponse("")
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/tasks/{iid}/undo")
+def undo_task(request: Request, iid: int):
+    """Reopen an auto-closed item; the next sync re-creates its Google item."""
+    c = db.connect()
+    db.undo_close(c, iid)
+    try:
+        google_sync.sync_pending(c)
+    except Exception:  # noqa: BLE001
+        pass
+    if _hx(request):
+        return HTMLResponse("")
+    return RedirectResponse("/", status_code=303)
 
 
 @app.get("/activity", response_class=HTMLResponse)
@@ -526,19 +599,49 @@ def _device_view(r):
 
 @app.get("/settings", response_class=HTMLResponse)
 def settings(request: Request, mail: str = ""):
+    c = db.connect()
     gpu_clear, gpu_detail = gpu_gate.peek()
+    bh, bm = _brief_hm(c)
     return page("settings.html", request, active="settings", mail=mail,
-                devices=[_device_view(r) for r in db.device_status_list(db.connect())],
+                devices=[_device_view(r) for r in db.device_status_list(c)],
                 mcp_running=mcp_mgr.running(), model=assistant.MODEL,
                 worker_running=worker_mgr.running(), worker=_worker_status(),
-                queue=db.queue_stats(db.connect()),
+                queue=db.queue_stats(c),
                 gpu_clear=gpu_clear, gpu_detail=gpu_detail,
                 asr_model=os.environ.get("LISTENER_ASR_MODEL", "large-v3"),
                 google=google_sync.status(),
+                google_paused=not google_sync.sync_enabled(c),
                 mail_configured=mailer.configured(),
                 mail_to=(os.environ.get("LISTENER_MAIL_TO")
                          or os.environ.get("LISTENER_SMTP_USER") or "—"),
-                brief_time=f"{BRIEF_HOUR % 12 or 12}:{BRIEF_MIN:02d} PM")
+                brief_time=_fmt_hm(bh, bm), brief_time_val=f"{bh:02d}:{bm:02d}")
+
+
+@app.post("/settings/brief-time")
+def set_brief_time(t: str = Form("")):
+    """User-configurable nightly-brief send time (ADR-034)."""
+    try:
+        h, m = (int(x) for x in t.split(":")[:2])
+        if 0 <= h < 24 and 0 <= m < 60:
+            db.meta_set(db.connect(), "brief_time", f"{h:02d}:{m:02d}")
+            _schedule_brief()
+    except (ValueError, TypeError):
+        pass
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/settings/google/toggle")
+def google_toggle():
+    """Flip the Google-sync shutoff valve (ADR-034). Re-enabling flushes the backlog."""
+    c = db.connect()
+    now_off = not google_sync.sync_enabled(c)
+    db.meta_set(c, "google_sync_enabled", "1" if now_off else "0")
+    if now_off:                                  # just turned back ON → push what queued up
+        try:
+            google_sync.sync_pending(c)
+        except Exception:  # noqa: BLE001
+            pass
+    return RedirectResponse("/settings", status_code=303)
 
 
 @app.post("/settings/mcp/{action}")

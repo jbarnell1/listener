@@ -1,0 +1,50 @@
+{# Review queue: closure confirmations (events), triaged suggestions, and undo.
+   Expects: close_pending, suggested, auto_closed.  ADR-032 / ADR-033. #}
+{% if close_pending or suggested or auto_closed %}
+<div class="card" style="border-color:#3a4a6a">
+  <h2>🔎 Review queue</h2>
+
+  {% for i in close_pending %}
+  <div class="row" id="rev-{{ i.id }}" style="--hue:38">
+    <div class="av">📅</div>
+    <div class="grow">
+      <div class="name">Looks {{ i.close_kind or 'done' }} — remove “{{ i.action }}”?</div>
+      <div class="muted"><a href="/speakers/{{ i.speaker_id }}">{{ i.who }}</a>{% if i.due_at %} · {{ i.due_at|localtime }}{% endif %}</div>
+      {% if i.close_note %}<div class="quote">heard: "{{ i.close_note }}"</div>{% endif %}
+    </div>
+    <button class="btn" title="Remove from Calendar"
+            hx-post="/tasks/{{ i.id }}/confirm-close" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">Remove</button>
+    <button class="btn ghost" title="Keep it"
+            hx-post="/tasks/{{ i.id }}/keep" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">Keep</button>
+  </div>
+  {% endfor %}
+
+  {% for i in suggested %}
+  <div class="row" id="rev-{{ i.id }}" style="--hue:{{ i.speaker_id|hue }}">
+    <div class="av">{{ i.who|initials }}</div>
+    <div class="grow">
+      <div class="name">{{ i.action }}</div>
+      <div class="muted"><a href="/speakers/{{ i.speaker_id }}">{{ i.who }}</a>{% if i.due_at %} · {{ i.due_at|localtime }}{% endif %}
+        · <span class="chip">unsure{% if i.confidence %} · {{ (i.confidence * 100)|int }}%{% endif %}</span></div>
+      {% if i.source_quote %}<div class="quote">"{{ i.source_quote }}"</div>{% endif %}
+    </div>
+    <button class="btn" title="Add to {{ 'Calendar' if i.kind == 'event' else 'Tasks' }}"
+            hx-post="/tasks/{{ i.id }}/approve" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">Add</button>
+    <button class="x" title="Not a task — dismiss"
+            hx-post="/tasks/{{ i.id }}/dismiss" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">✕</button>
+  </div>
+  {% endfor %}
+
+  {% for i in auto_closed %}
+  <div class="row" id="rev-{{ i.id }}" style="--hue:150">
+    <div class="av">✓</div>
+    <div class="grow">
+      <div class="name" style="opacity:.7;text-decoration:line-through">{{ i.action }}</div>
+      <div class="muted">auto-{{ i.close_kind or 'completed' }}{% if i.close_note %} · heard: "{{ i.close_note }}"{% endif %}</div>
+    </div>
+    <button class="btn ghost" title="Reopen this item"
+            hx-post="/tasks/{{ i.id }}/undo" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">Undo</button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}

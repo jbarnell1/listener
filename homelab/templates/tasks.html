@@ -4,6 +4,8 @@
 <p class="sub">Pulled from your conversations. <b>Soon</b> = today / time-sensitive ·
 <b>Later</b> = upcoming or informational.</p>
 
+{% include "_review_queue.html" %}
+
 <div class="card">
   <h2>⚡ Soon</h2>
   {% for i in soon %}{% include "_task.html" %}

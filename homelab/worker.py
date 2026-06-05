@@ -60,6 +60,7 @@ def process_audio_file(audio, conn=None, chunk_id=None):
     """Full pipeline for one normalized wav. Returns the transcript id."""
     conn = conn or db.connect()
     tid = wordattribute.process_audio(audio, MODEL, chunk_id=chunk_id)
+    intents.reconcile_for_transcript(conn, tid)   # close out items this convo resolved (ADR-032)
     intents.run_for_transcript(conn, tid)
     profiles.update_for_transcript(conn, tid)
     tagger.tag_transcript(conn, tid)      # topic tags (ADR-029)

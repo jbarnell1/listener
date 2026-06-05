@@ -75,8 +75,11 @@ CREATE TABLE IF NOT EXISTS intents (
   speaker_id   INTEGER REFERENCES speakers(id),
   action       TEXT, tier TEXT, due_at TEXT,        -- due_at stored UTC (ADR-017)
   kind         TEXT,                                -- event | task | followup (ADR-026)
-  status       TEXT NOT NULL DEFAULT 'pending',     -- pending|scheduled|sent|dismissed
+  status       TEXT NOT NULL DEFAULT 'pending',     -- pending|suggested|dismissed
   source_quote TEXT,
+  confidence   REAL,                                -- extraction confidence (triage, ADR-033)
+  close_suggested INTEGER NOT NULL DEFAULT 0,       -- reconciler thinks it's resolved (ADR-032)
+  close_kind   TEXT, close_note TEXT, closed_at TEXT,  -- completed|cancelled · evidence · when
   calendar_event_id TEXT, calendar_link TEXT, gtask_id TEXT, synced_at TEXT,  -- Google sync (ADR-026)
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -133,9 +136,14 @@ def _migrate(conn):
     if "error" not in ch:
         conn.execute("ALTER TABLE chunks ADD COLUMN error TEXT")
     it = cols("intents")
-    for col in ("kind", "calendar_event_id", "calendar_link", "gtask_id", "synced_at"):
+    for col in ("kind", "calendar_event_id", "calendar_link", "gtask_id", "synced_at",
+                "close_kind", "close_note", "closed_at"):
         if col not in it:
             conn.execute(f"ALTER TABLE intents ADD COLUMN {col} TEXT")
+    if "confidence" not in it:
+        conn.execute("ALTER TABLE intents ADD COLUMN confidence REAL")
+    if "close_suggested" not in it:
+        conn.execute("ALTER TABLE intents ADD COLUMN close_suggested INTEGER NOT NULL DEFAULT 0")
     conn.commit()
 
 
@@ -241,7 +249,7 @@ def rename_speaker(conn, sid, name):
 def list_intents(conn, tier=None):
     base = ("SELECT i.*, COALESCE(sp.name, 'Unknown_' || sp.id, '—') AS who "
             "FROM intents i LEFT JOIN speakers sp ON sp.id = i.speaker_id "
-            "WHERE i.status != 'dismissed' ")
+            "WHERE i.status NOT IN ('dismissed','suggested') AND i.close_suggested=0 ")
     if tier:
         return conn.execute(base + "AND i.tier=? ORDER BY i.due_at IS NULL, i.due_at",
                             (tier,)).fetchall()
@@ -252,7 +260,7 @@ def speaker_intents(conn, sid):
     return conn.execute(
         "SELECT i.*, COALESCE(sp.name, 'Unknown_' || sp.id) AS who FROM intents i "
         "LEFT JOIN speakers sp ON sp.id = i.speaker_id "
-        "WHERE i.speaker_id=? AND i.status!='dismissed' "
+        "WHERE i.speaker_id=? AND i.status NOT IN ('dismissed','suggested') AND i.close_suggested=0 "
         "ORDER BY i.due_at IS NULL, i.due_at", (sid,)).fetchall()
 
 
@@ -261,12 +269,91 @@ def dismiss_intent(conn, iid):
     conn.commit()
 
 
+# --- triage (ADR-033) + closure reconciliation (ADR-032) ---
+
+def suggested_intents(conn):
+    """Low-confidence new items awaiting your approval (Review queue, ADR-033)."""
+    return conn.execute(
+        "SELECT i.*, COALESCE(sp.name, 'Unknown_' || sp.id, '—') AS who "
+        "FROM intents i LEFT JOIN speakers sp ON sp.id = i.speaker_id "
+        "WHERE i.status='suggested' ORDER BY i.created_at DESC, i.id DESC").fetchall()
+
+
+def close_pending_intents(conn):
+    """Open items the reconciler flagged as probably resolved, awaiting confirmation
+    (events; tasks auto-close). (ADR-032)"""
+    return conn.execute(
+        "SELECT i.*, COALESCE(sp.name, 'Unknown_' || sp.id, '—') AS who "
+        "FROM intents i LEFT JOIN speakers sp ON sp.id = i.speaker_id "
+        "WHERE i.close_suggested=1 AND i.status NOT IN ('dismissed','suggested') "
+        "ORDER BY i.id DESC").fetchall()
+
+
+def recent_auto_closed(conn, hours=48, limit=8):
+    """Recently auto-closed items, for the undo affordance + feed (ADR-032)."""
+    return conn.execute(
+        "SELECT i.*, COALESCE(sp.name, 'Unknown_' || sp.id, '—') AS who "
+        "FROM intents i LEFT JOIN speakers sp ON sp.id = i.speaker_id "
+        "WHERE i.status='dismissed' AND i.close_note IS NOT NULL "
+        "AND i.closed_at > datetime('now', ?) ORDER BY i.closed_at DESC LIMIT ?",
+        (f"-{int(hours)} hours", limit)).fetchall()
+
+
+def open_intents_for_reconcile(conn, limit=80):
+    """Compact list of currently-open items for the closure reconciler (ADR-032)."""
+    return conn.execute(
+        "SELECT i.id, i.action, i.kind, i.due_at, "
+        "COALESCE(sp.name, 'Unknown_' || sp.id, '—') AS who FROM intents i "
+        "LEFT JOIN speakers sp ON sp.id = i.speaker_id "
+        "WHERE i.status NOT IN ('dismissed','suggested') AND i.close_suggested=0 "
+        "ORDER BY i.id DESC LIMIT ?", (limit,)).fetchall()
+
+
+def approve_intent(conn, iid):
+    """Promote a suggested item to active (caller then syncs it to Google)."""
+    conn.execute("UPDATE intents SET status='pending', close_suggested=0 WHERE id=?", (iid,))
+    conn.commit()
+
+
+def suggest_close(conn, iid, kind, note):
+    """Flag an open item as probably resolved — held for user confirmation (events)."""
+    conn.execute("UPDATE intents SET close_suggested=1, close_kind=?, close_note=? WHERE id=?",
+                 (kind, note, iid))
+    conn.commit()
+
+
+def close_intent(conn, iid, kind=None, note=None):
+    """Close an item out (auto-complete/cancel, or confirmed). Records why + when so
+    it can show in the feed and be undone. COALESCE keeps any reason set earlier."""
+    conn.execute("UPDATE intents SET status='dismissed', close_suggested=0, "
+                 "close_kind=COALESCE(?, close_kind), close_note=COALESCE(?, close_note), "
+                 "closed_at=datetime('now') WHERE id=?", (kind, note, iid))
+    conn.commit()
+
+
+def keep_open(conn, iid):
+    """User rejected a close suggestion — keep the item active, clear the flag."""
+    conn.execute("UPDATE intents SET close_suggested=0, close_kind=NULL, close_note=NULL "
+                 "WHERE id=?", (iid,))
+    conn.commit()
+
+
+def undo_close(conn, iid):
+    """Reopen an auto-closed item and clear its Google linkage so the next sync
+    re-creates the Calendar event / Task."""
+    conn.execute("UPDATE intents SET status='pending', close_suggested=0, closed_at=NULL, "
+                 "close_note=NULL, close_kind=NULL, synced_at=NULL, "
+                 "calendar_event_id=NULL, calendar_link=NULL, gtask_id=NULL WHERE id=?", (iid,))
+    conn.commit()
+
+
 def unsynced_intents(conn):
     """Pending intents not yet pushed to Google Calendar/Tasks (ADR-026)."""
     return conn.execute(
         "SELECT i.*, COALESCE(sp.name, 'Unknown_' || sp.id) AS who FROM intents i "
         "LEFT JOIN speakers sp ON sp.id = i.speaker_id "
-        "WHERE i.synced_at IS NULL AND i.status != 'dismissed' ORDER BY i.id").fetchall()
+        "WHERE i.synced_at IS NULL AND i.status NOT IN ('dismissed','suggested') "
+        "AND i.close_suggested=0 ORDER BY i.id").fetchall()
 
 
 def mark_intent_synced(conn, iid, calendar_event_id=None, calendar_link=None, gtask_id=None):

@@ -61,6 +61,12 @@ def configured():
     return get_credentials() is not None
 
 
+def sync_enabled(conn=None):
+    """The shutoff valve (ADR-034). When OFF, items still reach the email digest and
+    dashboard, but nothing is pushed to — or removed from — Google Calendar/Tasks."""
+    return db.meta_get(conn or db.connect(), "google_sync_enabled", "1") != "0"
+
+
 def status():
     return {"connected": configured(),
             "client_secret": os.path.exists(CLIENT_SECRET), "token": os.path.exists(TOKEN)}
@@ -110,7 +116,9 @@ def delete_task(creds, task_id):
 
 def remove_intent(conn, intent_id):
     """Delete the Google item(s) backing an intent (called when the user dismisses
-    it). Safe no-op if not connected or already gone."""
+    it). Safe no-op if not connected, valve closed, or already gone."""
+    if not sync_enabled(conn):
+        return False
     creds = get_credentials()
     if not creds:
         return False
@@ -142,7 +150,12 @@ def create_task(creds, title, due_utc_iso=None, notes=""):
 
 def sync_pending(conn, verbose=False):
     """Push every unsynced intent to its Google surface by kind. No-op (safe) if
-    not connected. Followups are marked synced (they belong to the email digest)."""
+    not connected or the valve is closed. Followups are marked synced (they belong
+    to the email digest)."""
+    if not sync_enabled(conn):
+        if verbose:
+            print("google: sync paused (shutoff valve) — items stay in email + dashboard")
+        return {"connected": configured(), "synced": 0, "paused": True}
     creds = get_credentials()
     if not creds:
         if verbose:

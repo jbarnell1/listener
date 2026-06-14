@@ -5,6 +5,19 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-040 — Config-on-the-fly: editable roster + hot-swappable pipeline model
+**2026-06-14.** The project needs constant live tuning, so configuration is frontend-
+editable rather than code/env-bound. (1) **Roster editor** — `/speakers` is an inline
+editor for the known people: rename, set relationships (datalist), pick which voice is
+"me" (exclusive), delete (confirmed), link to each profile; unknowns route to the
+`/unknown` batch-namer. This is how demo/test labels get corrected once a real voice is
+captured (e.g. relabel a placeholder to the real person). (2) **Hot-swappable pipeline
+LLM** — `intents`/`profiles`/`tagger` read the Ollama model from `cfg.llm_model`
+(default qwen3:8b) at call time, editable from Settings, applied on the next chunk with
+no restart. Extends ADR-034/035 (the live-tunables surface) and pairs with the model
+analysis in issue #2. Prompts remain code-side for now (format-fragile); revisit if
+on-the-fly prompt editing is needed.
+
 ### ADR-039 — V1 scope retained (full ambient capture) + identify-time consent posture
 **2026-06-14.** Owner's decision: keep the **full ambient-capture vision for V1** rather
 than narrowing to self-recording — it's the only version that solves the core pain (not

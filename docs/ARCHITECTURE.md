@@ -84,7 +84,12 @@ phase docs implement it.
 - **BLE** = control/status/provisioning only, never bulk audio.
 
 ### Timeliness = scheduling, not connectivity
-- LLM extracts structured intent `{action, due_time, tier, confidence}`.
+- LLM extracts structured intent `{action, owner, due_time, tier, recurrence, confidence}`.
+- **Context shaping** (ADR-038): the small local model is fed a compact world snapshot
+  (speaker roster + open tasks + rolling recent-context) so it resolves people, task
+  **ownership**, vague references, and dups by retrieval; implicit speech ("out of
+  coffee") and explicit captures ("remind me" / a device REC press) are handled, ASR is
+  name-biased + non-speech-gated, and recurrence → Calendar RRULE.
 - **Confidence triage** (ADR-033): high-confidence commitments auto-route below;
   uncertain ones are held in the dashboard **Review queue** until approved, so all-day
   capture can't clutter the real calendar.

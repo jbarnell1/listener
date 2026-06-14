@@ -5,6 +5,36 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-039 — V1 scope retained (full ambient capture) + identify-time consent posture
+**2026-06-14.** Owner's decision: keep the **full ambient-capture vision for V1** rather
+than narrowing to self-recording — it's the only version that solves the core pain (not
+forgetting), and it stays useful even when speakers are unidentified (just tracking words
+spoken). Legal posture (accepted): an **unknown voiceprint not linked to an identity is
+not PII** — it's an anonymous cluster; PII only arises when a *user* **identifies** a
+speaker, and at that point a **policy** places the consent obligation on the **identifying
+user** (they confirm they have that person's permission), with liability on the user, not
+the software. Action: a short **Usage & Consent Policy** + an accept-gate at the identify
+step (issue #3). Security gaps (#4 per-device keys, #5 encryption at rest) remain valid
+regardless. Supersedes the rejected "narrow the MVP" direction.
+
+### ADR-038 — Real-world → context shaping (the "usefulness" pass)
+**2026-06-14.** To make a small local model (Qwen3-8B) reliably turn messy everyday speech
+into useful tasks, the guiding principle is **retrieval over inference**: feed the model
+answer-adjacent context and de-noise the input, rather than asking it to infer from a
+bare chunk. Changes: (1) **context preamble** — extraction now sees a speaker roster
+(who is "me"/wife/coworker), the open-task list, and a rolling recent-context note;
+(2) **ownership** (`owner`, who will *do* it, normalized to "me") separated from who
+spoke; (3) **capture** — implicit tasks ("out of coffee"→buy coffee), spoken markers
+("remind me"/"note to self") and a **device REC-button mark** (`X-Mark`→`chunks.marked`)
+force high confidence / bypass triage; (4) **ASR de-noising** — decoder name-biasing
+(`initial_prompt`) + dropping no-speech/low-logprob/boilerplate before any LLM call;
+(5) **continuity** — a bounded, session-decaying recent-context summary across chunks;
+(6) **recurrence** → Calendar RRULE; (7) **debounce** — profile refresh moved to a
+GPU-gated hourly flush, tagger retrieves relevant topics instead of dumping all 60.
+Device-shape call: **keyword/marker capture first** (hands-free, zero firmware
+dependency), the physical button as the high-trust complement when firmware lands.
+Closes issues #15-20.
+
 ### ADR-037 — Self-healing watchdog for the always-on homelab
 **2026-06-14.** The logon-only auto-start (ADR-030) left the app **down** after any
 mid-session WSL shutdown / sleep-resume / reboot-before-login — and because the new

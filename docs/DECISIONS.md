@@ -5,6 +5,22 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-041 — Anti-churn architecture: precision-first, self-correcting capture→useful
+**2026-06-14.** The hard problem isn't smarter ambient extraction — it's that errors are
+**asymmetric** (a wrong calendar entry erodes trust far more than a missed one) and the
+cold-start is a churn peak. So the deterministic spine carries the trust while ambient
+understanding improves behind it. Five changes (issues #21-25): **(#21) wearer-first ID** —
+check the owner's self-voiceprint against its own looser gate before the N-way match, so
+task **ownership** ("did I say it?") is robust even on rough audio (the most valuable, most
+reliable signal on a body-worn mic); **(#22) correction feedback loop** — log Review
+approve/dismiss decisions and offer a one-tap threshold nudge, converting early churn into
+auto-tuning; **(#23) bounded, relevance-ranked context** — rank open tasks against the chunk
+and cap the preamble so context never becomes the noise; **(#24) bounded compounding** —
+length-cap profile/tag summaries + a rebuild-from-source escape hatch so drift is reversible;
+**(#25) calibration mode** — a week-one high-precision posture (raised triage + Google valve
+off) with a graduation checklist and one-tap go-live, designing the cold-start flood out.
+Builds on ADR-033 (triage), ADR-038 (context), ADR-034/035 (live config).
+
 ### ADR-040 — Config-on-the-fly: editable roster + hot-swappable pipeline model
 **2026-06-14.** The project needs constant live tuning, so configuration is frontend-
 editable rather than code/env-bound. (1) **Roster editor** — `/speakers` is an inline

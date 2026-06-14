@@ -5,7 +5,12 @@
 (improves their voiceprint) or name as new — recognized from then on. Fill in as many
 as you like and <b>Save all</b> in one go.</p>
 
-{% if unknowns %}
+{% if unknowns and not consent_ok %}
+<div class="card" style="border-color:#4c4329">
+  <div class="empty" style="padding:16px 0">🤝 Naming a voice links it to a real person.
+  <a href="/consent">Review &amp; accept the naming policy</a> to enable identifying voices.</div>
+</div>
+{% elif unknowns %}
 <form method="post" action="/unknown/batch">
 {% for u in unknowns %}
   <div class="card" style="--hue:{{ u.id|hue }}">

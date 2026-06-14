@@ -57,6 +57,7 @@
       </div>
     {% endfor %}
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+      {% if consent_ok %}
       {% if enrolled %}
       <form class="field" hx-post="/speakers/{{ u.id }}/merge"
             hx-target="#unk-{{ u.id }}" hx-swap="outerHTML">
@@ -70,6 +71,9 @@
         <input name="name" placeholder="Name as a new person">
         <button class="btn">Save</button>
       </form>
+      {% else %}
+      <a class="muted" href="/consent">🤝 Accept the naming policy to name voices →</a>
+      {% endif %}
     </div>
   </div>
 {% endfor %}

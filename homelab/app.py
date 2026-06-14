@@ -284,9 +284,10 @@ def page(name, request, **ctx):
         ctx.setdefault("review_count", len(db.suggested_intents(c)) + len(db.close_pending_intents(c)))
         ctx.setdefault("unknown_count", len(db.unknown_speakers(c)))
         ctx.setdefault("device_alert", _device_alert(c))
+        ctx.setdefault("consent_ok", bool(db.meta_get(c, "consent_accepted_at")))
     except Exception:  # noqa: BLE001
         for k, v in (("new_count", 0), ("review_count", 0), ("unknown_count", 0),
-                     ("device_alert", None)):
+                     ("device_alert", None), ("consent_ok", True)):
             ctx.setdefault(k, v)
     return tpl.TemplateResponse(request, name, ctx)
 
@@ -403,6 +404,24 @@ def speakers(request: Request):
                 enrolled=enrolled, unknown_n=unknown_n)
 
 
+def _consent_ok(c=None):
+    """Has the user accepted the identify-time consent (ADR-039)? Gates naming voices."""
+    return bool(db.meta_get(c or db.connect(), "consent_accepted_at"))
+
+
+@app.get("/consent", response_class=HTMLResponse)
+def consent(request: Request):
+    return page("consent.html", request, active="speakers",
+                accepted_at=db.meta_get(db.connect(), "consent_accepted_at"))
+
+
+@app.post("/consent/accept")
+def consent_accept(request: Request):
+    db.meta_set(db.connect(), "consent_accepted_at",
+                datetime.now(_UTC).strftime("%Y-%m-%d %H:%M:%S"))
+    return RedirectResponse(request.headers.get("referer") or "/unknown", status_code=303)
+
+
 @app.post("/roster/save")
 async def roster_save(request: Request):
     """Edit the whole known-people roster in one go (ADR-040): names, relationships,
@@ -493,6 +512,11 @@ def delete_speaker(sid: int):
 
 @app.post("/speakers/{sid}/name")
 def name_speaker(request: Request, sid: int, name: str = Form(...)):
+    if not _consent_ok():                            # identify-time consent gate (ADR-039)
+        if _hx(request):
+            return HTMLResponse('<div class="card"><div class="empty">First accept the '
+                                '<a href="/consent">naming policy</a> to identify voices.</div></div>')
+        return RedirectResponse("/consent", status_code=303)
     nm = name.strip()
     db.rename_speaker(db.connect(), sid, nm)
     if _hx(request):
@@ -503,6 +527,11 @@ def name_speaker(request: Request, sid: int, name: str = Form(...)):
 
 @app.post("/speakers/{sid}/merge")
 def merge_speaker(request: Request, sid: int, target: int = Form(...)):
+    if not _consent_ok():                            # identify-time consent gate (ADR-039)
+        if _hx(request):
+            return HTMLResponse('<div class="card"><div class="empty">First accept the '
+                                '<a href="/consent">naming policy</a> to identify voices.</div></div>')
+        return RedirectResponse("/consent", status_code=303)
     db.merge_speakers(db.connect(), sid, target)
     who = db.get_speaker(db.connect(), target)
     nm = who["label"] if who else "speaker"
@@ -626,6 +655,8 @@ def unknown(request: Request):
 async def unknown_batch(request: Request):
     """Assign many unknown voices in one go: per id, merge into an existing person
     (wins) or name as new. Empty rows are skipped."""
+    if not _consent_ok():                            # identify-time consent gate (ADR-039)
+        return RedirectResponse("/consent", status_code=303)
     form = await request.form()
     c = db.connect()
     merged = named = 0

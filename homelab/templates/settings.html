@@ -211,5 +211,8 @@
   <p class="muted" style="margin:.6em 0 0">Captured audio <b>auto-deletes after 30 days</b>
   (3 AM daily); transcripts and profiles are kept. Snippet playback becomes text-only once
   audio is purged.</p>
+  <p class="muted" style="margin:.6em 0 0">Naming voices follows the
+  <a href="/consent">Usage &amp; Consent Policy</a> —
+  {% if consent_ok %}<span style="color:var(--good)">accepted ✓</span>{% else %}not yet accepted{% endif %}.</p>
 </div>
 {% endblock %}

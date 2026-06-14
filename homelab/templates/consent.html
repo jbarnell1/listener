@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">Naming &amp; consent</h1>
+<p class="sub">One-time acknowledgement before you can attach a name to a voice.</p>
+
+<div class="card">
+  <h2>🤝 Before you identify anyone</h2>
+  <p class="muted" style="margin:0 0 10px">An unnamed voice is just an anonymous cluster —
+  not tied to any real person. The moment you <b>name</b> one, you're linking that voice to
+  a real identity, so:</p>
+  <ul class="muted" style="margin:0 0 12px;padding-left:20px;line-height:1.7">
+    <li>You confirm you <b>have that person's permission</b> to associate their voice with
+      their identity.</li>
+    <li>You're responsible for <b>using the device lawfully</b> where you are (recording
+      laws vary by place).</li>
+    <li>Anyone can be set to <b>don't-profile</b> or <b>deleted</b> (voiceprint + all data)
+      at any time.</li>
+  </ul>
+  <p class="muted" style="font-size:.82rem;margin:0 0 14px">Full text: <a href="https://github.com/jbarnell1/listener/blob/main/docs/USAGE-POLICY.md" target="_blank" rel="noopener">Usage &amp; Consent Policy ↗</a></p>
+
+  {% if accepted_at %}
+  <div class="empty" style="color:var(--good);padding:8px 0">✓ Accepted on {{ accepted_at }} —
+  naming is enabled. <a href="/unknown">Name voices →</a></div>
+  {% else %}
+  <form method="post" action="/consent/accept">
+    <button class="btn" style="width:100%;padding:13px">I understand &amp; have permission — enable naming</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

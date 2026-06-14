@@ -5,6 +5,20 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-037 — Self-healing watchdog for the always-on homelab
+**2026-06-14.** The logon-only auto-start (ADR-030) left the app **down** after any
+mid-session WSL shutdown / sleep-resume / reboot-before-login — and because the new
+service worker (ADR-036) cached the app shell, a down server *looked* alive but stale
+(failed navigations fell back to the cached dashboard; POSTs silently failed). Two
+fixes: (1) the **service worker is now network-only for HTML** (caches only static
+assets), so an outage surfaces an honest error instead of a fake live page; (2) a
+**health-gated watchdog** — `listener.sh watchdog` restarts the app only if `/healthz`
+fails (safe no-op when healthy, so it never interrupts a running transcription), driven
+by a **Windows Scheduled Task every 3 min** (`ListenerWatchdog`, via a hidden VBS
+launcher). This matters before the device goes live: a silently-down homelab would fail
+`/ingest` uploads. Rejected blindly re-running `listener.sh up` on a timer (would kill +
+restart a busy worker every cycle). Extends ADR-030; pairs with auto-login for headless.
+
 ### ADR-036 — Installable PWA + pre-hardware dashboard UX pass
 **2026-06-05.** The tailnet dashboard becomes an **installable PWA** so it lives on the
 phone like an app: web manifest (standalone, dark theme-color, headphone **SVG** icons —

@@ -16,11 +16,31 @@ Then:
     python google_sync.py --sync          # push any pending intents now
 """
 import os
+import re
 import sys
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import db
+
+
+def _rrule(rec):
+    """Map our recurrence shorthand to a Google Calendar RRULE (ADR-038).
+    daily | weekly:TU | biweekly:FR | monthly  ->  RRULE:FREQ=...;[INTERVAL=2;][BYDAY=..]"""
+    if not rec:
+        return None
+    r = rec.strip().lower()
+    if r == "daily":
+        return "RRULE:FREQ=DAILY"
+    if r == "monthly":
+        return "RRULE:FREQ=MONTHLY"
+    m = re.match(r"(weekly|biweekly)(?::([a-z]{2}))?$", r)
+    if m:
+        interval = ";INTERVAL=2" if m.group(1) == "biweekly" else ""
+        day = (m.group(2) or "").upper()
+        byday = f";BYDAY={day}" if day in {"MO", "TU", "WE", "TH", "FR", "SA", "SU"} else ""
+        return f"RRULE:FREQ=WEEKLY{interval}{byday}"
+    return None
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.events",
           "https://www.googleapis.com/auth/tasks"]
@@ -91,7 +111,8 @@ def _svc(name, version, creds):
     return build(name, version, credentials=creds, cache_discovery=False)
 
 
-def create_event(creds, summary, due_utc_iso, description="", duration_min=None, remind_min=None):
+def create_event(creds, summary, due_utc_iso, description="", duration_min=None,
+                 remind_min=None, recurrence=None):
     duration_min = EVENT_HOURS * 60 if duration_min is None else duration_min
     remind_min = REMIND_MIN if remind_min is None else remind_min
     start = datetime.fromisoformat(due_utc_iso).astimezone(TZ)
@@ -103,6 +124,9 @@ def create_event(creds, summary, due_utc_iso, description="", duration_min=None,
         "reminders": {"useDefault": False,
                       "overrides": [{"method": "popup", "minutes": remind_min}]},
     }
+    rrule = _rrule(recurrence)
+    if rrule:
+        body["recurrence"] = [rrule]
     ev = _svc("calendar", "v3", creds).events().insert(calendarId="primary", body=body).execute()
     return ev["id"], ev.get("htmlLink")
 
@@ -168,11 +192,14 @@ def sync_pending(conn, verbose=False):
     n = 0
     for it in db.unsynced_intents(conn):
         kind = (it["kind"] or "task").lower()
+        rec = it["recurrence"]
         desc = f'Listener · {it["who"]}: "{it["source_quote"] or ""}"'
         try:
-            if kind == "event" and it["due_at"]:
+            # A recurring item with a time is most useful as a recurring Calendar event,
+            # even if the model called it a "task" (Google Tasks can't recur). ADR-038.
+            if (kind == "event" or rec) and it["due_at"]:
                 eid, link = create_event(creds, it["action"], it["due_at"], desc,
-                                         duration_min=dur, remind_min=rem)
+                                         duration_min=dur, remind_min=rem, recurrence=rec)
                 db.mark_intent_synced(conn, it["id"], calendar_event_id=eid, calendar_link=link)
             elif kind == "followup":
                 db.mark_intent_synced(conn, it["id"])          # digest-only

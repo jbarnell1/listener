@@ -168,6 +168,15 @@ TUNABLES = [
          "help": "Also pause if free VRAM drops below this (OOM guard). Advanced — leave as-is "
                  "unless you hit out-of-memory errors."},
     ]),
+    ("Transcription", [
+        {"key": "asr_no_speech_max", "label": "Drop-silence aggressiveness", "default": 0.6,
+         "min": 0.1, "max": 0.95, "step": 0.05, "unit": "",
+         "help": "Discard a transcribed segment if Whisper is at least this sure it's NOT "
+                 "speech. Lower = filters more silence/noise (fewer phantom 'Thank you' lines)."},
+        {"key": "asr_min_logprob", "label": "Min transcription confidence", "default": -1.0,
+         "min": -3.0, "max": 0.0, "step": 0.1, "unit": "",
+         "help": "Discard low-confidence segments (avg log-prob below this). Closer to 0 = stricter."},
+    ]),
 ]
 _TUNABLE_BY_KEY = {k["key"]: k for _, ks in TUNABLES for k in ks}
 
@@ -182,6 +191,21 @@ def _tuning_view(c):
             items.append({**k, "value": val, "is_default": val == k["default"]})
         out.append((group, items))
     return out
+
+
+def _flush_profiles():
+    """Hourly debounced profile refresh (ADR-038) — only when the GPU is free, so it
+    never competes with gaming or the live pipeline."""
+    try:
+        clear, _ = gpu_gate.peek()
+        if not clear:
+            return
+        import profiles
+        done = profiles.flush_dirty(db.connect())
+        if done:
+            print(f"profile flush: refreshed {len(done)} speaker(s)", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"profile flush error: {e}", flush=True)
 
 
 def _worker_status():
@@ -202,6 +226,8 @@ async def lifespan(_app):
                       id="audio_purge", replace_existing=True, misfire_grace_time=7200)
     scheduler.add_job(backup.make_backup, CronTrigger(hour=3, minute=30),
                       id="db_backup", replace_existing=True, misfire_grace_time=7200)
+    scheduler.add_job(_flush_profiles, CronTrigger(minute=20),
+                      id="profile_flush", replace_existing=True, misfire_grace_time=1800)
     scheduler.start()     # nightly brief + 3 AM purge + 3:30 AM DB backup (ADR-030)
     yield
     scheduler.shutdown(wait=False)
@@ -879,8 +905,10 @@ def _verify_sig(x_ts: str, x_sig: str, body: bytes) -> int:
 
 
 @app.post("/ingest")
-async def ingest(request: Request, x_sig: str = Header(""),
-                 x_ts: str = Header(""), x_seq: str = Header("0")):
+async def ingest(request: Request, x_sig: str = Header(""), x_ts: str = Header(""),
+                 x_seq: str = Header("0"), x_mark: str = Header("0")):
+    # X-Mark: firmware sets this (e.g. "1") when the user pressed the REC/"remember"
+    # button during this chunk → its items are deliberate captures (ADR-038).
     try:
         body = await request.body()
     except ClientDisconnect:                  # device/Funnel dropped mid-upload — not an error
@@ -888,13 +916,14 @@ async def ingest(request: Request, x_sig: str = Header(""),
     if len(body) > 25 * 1024 * 1024:          # size cap on the public endpoint
         raise HTTPException(413, "too large")
     ts = _verify_sig(x_ts, x_sig, body)
+    marked = 1 if str(x_mark).strip() not in ("", "0", "false", "False") else 0
     path = os.path.join(CHUNK_DIR, f"chunk_{ts}_{x_seq}.bin")
     with open(path, "wb") as f:
         f.write(body)
     c = db.connect()
     cur = c.cursor()
-    cur.execute("INSERT INTO chunks(seq, ts_start, bytes, path, acked) VALUES (?,?,?,?,1)",
-                (int(x_seq), str(ts), len(body), path))
+    cur.execute("INSERT INTO chunks(seq, ts_start, bytes, path, acked, marked) VALUES (?,?,?,?,1,?)",
+                (int(x_seq), str(ts), len(body), path, marked))
     c.commit()
     return {"acked": cur.lastrowid}
 

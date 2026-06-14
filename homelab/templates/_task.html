@@ -4,7 +4,9 @@
     <div class="name">{{ i.action }}</div>
     <div class="muted">
       <a href="/speakers/{{ i.speaker_id }}">{{ i.who }}</a>
+      {% if i.owner and i.owner|lower not in ['me', 'myself'] %} · <b>for {{ i.owner }}</b>{% endif %}
       {% if i.due_at %} · <span class="due">{{ i.due_at|localtime }}</span>{% endif %}
+      {% if i.recurrence %} · <span class="chip" style="font-size:.6rem;padding:1px 7px">🔁 {{ i.recurrence }}</span>{% endif %}
     </div>
     {% if i.source_quote %}<div class="quote">"{{ i.source_quote }}"</div>{% endif %}
     {% if i.calendar_event_id or i.gtask_id or i.kind == 'followup' or i.transcript_id %}

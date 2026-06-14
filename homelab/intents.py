@@ -12,6 +12,7 @@ Usage:
 """
 import difflib
 import json
+import re
 import sys
 import urllib.request
 from datetime import datetime
@@ -31,30 +32,52 @@ MODEL = "qwen3:8b"
 TRIAGE_THRESHOLD = 0.75
 CLOSE_THRESHOLD = 0.70
 
+# Spoken "remember this" markers — the lowest-friction explicit capture (ADR-038).
+# When the owner deliberately flags something, trust it: high confidence, no triage.
+EXPLICIT_MARKERS = re.compile(
+    r"\b(remind me|note to self|don'?t (?:let me )?forget|remember to|make sure (?:i|to)|"
+    r"add (?:this|that|it) to my list|put (?:this|that|it) on my list)\b", re.I)
+
 SYSTEM = """You extract action items and follow-ups from a conversation transcript.
 Return ONLY JSON: {"intents":[{"action": str, "kind": "event"|"task"|"followup",
-"tier": "SOON"|"LATER", "speaker": str, "due_text": str|null, "due_local": str|null,
-"source_quote": str, "confidence": number}]}.
+"tier": "SOON"|"LATER", "speaker": str, "owner": str, "due_text": str|null,
+"due_local": str|null, "recurrence": str|null, "source_quote": str, "confidence": number}]}.
 
-kind (this decides where it goes — calendar, tasks, or the digest):
-- "event"    = a scheduled happening at a specific time the person attends (dinner,
+Use the CONTEXT block in the user message (the people, what's already on the list, and
+what's been happening lately) to resolve who's who, whose task it is, and vague references.
+
+kind (decides where it goes — calendar, tasks, or the digest):
+- "event"    = a scheduled happening at a specific time the owner attends (dinner,
                meeting, appointment, a call at a set time). Usually has a time.
-- "task"     = an actionable to-do to complete (call dentist, take out trash, buy
-               milk), with or without a deadline.
-- "followup" = something to revisit or think about, with NO concrete action or
-               deadline (a topic raised, "we should look into X someday").
+- "task"     = an actionable to-do to complete (call dentist, take out trash, buy milk),
+               with or without a deadline.
+- "followup" = something to revisit with NO concrete action or deadline.
+
+Everyday speech rarely sounds like a task — capture the INTENT behind it:
+- "we're out of coffee" → task "buy coffee"; "I should call mom" → "call mom";
+  "don't let me forget the dentist tomorrow" → "call the dentist".
+- Skip pure chatter, opinions, and hypotheticals ("if it rains we'll cancel"), and
+  anything negated or already done ("never mind, I already did it").
+
+owner = WHO will do it (NOT who said it):
+- Default "me" (the device owner) for the owner's own commitments and things asked OF
+  them ("I'll do X" → "me"; "can you do X?" asked of the owner → "me").
+- A task that clearly belongs to someone else → that person's name (use CONTEXT people).
 
 Rules:
-- SOON = time-sensitive or needs action today. LATER = tomorrow or later, or informational.
-- Current local time is %(now)s (%(tz)s). Resolve relative times ("tonight",
-  "in 2 hours", "tomorrow", "Saturday at 6") to a concrete LOCAL datetime in
-  due_local as ISO 8601 like 2026-06-03T19:00. Do NOT convert to UTC. No time → null.
-- Capture real action items, commitments, and notable follow-ups. None → {"intents":[]}.
-- speaker = who said it, using the transcript's speaker labels.
-- confidence (0-1) = how sure you are this is a REAL, intended commitment or plan
-  (not a casual hypothetical, joke, or passing aside). A firm explicit task/plan is
-  ~0.9+; "we should maybe sometime…" is ~0.4. Be calibrated — this gates whether it
-  is auto-added to the calendar or held for the person to confirm.
+- SOON = time-sensitive or needs action today. LATER = tomorrow+ or informational.
+- Current local time is %(now)s (%(tz)s). Resolve relative times ("tonight", "tomorrow",
+  "Saturday at 6") to a concrete LOCAL datetime in due_local as ISO 8601 like
+  2026-06-03T19:00. Do NOT convert to UTC. No time → null.
+- recurrence: if it repeats, set "daily", "weekly:DD" (DD ∈ MO TU WE TH FR SA SU),
+  "biweekly:DD", or "monthly" ("trash every Tuesday" → "weekly:TU"). Otherwise null.
+- action must be a SELF-CONTAINED title. Resolve "the thing"/"that"/"it" from CONTEXT;
+  if you genuinely cannot tell what it refers to, keep confidence low.
+- speaker = who said it, using the transcript's labels.
+- confidence (0-1) = how sure this is a REAL, intended commitment/plan (not a casual
+  hypothetical, joke, or aside). Firm explicit task/plan ~0.9+; "maybe someday" ~0.4.
+  This gates whether it is auto-added or held for the person to confirm.
+- Don't recreate something already on the list (see CONTEXT). None → {"intents":[]}.
 """
 
 DEMO = """Sarah: Hey, can you take out the trash tonight? Pickup is early tomorrow.
@@ -96,6 +119,46 @@ def to_utc(due_local, due_text, now_local):
 def conversation_for(tid):
     rows = db.transcript_segments(db.connect(), tid)
     return "\n".join(f"{r['who']}: {r['text']}" for r in rows)
+
+
+def _due_label(iso):
+    if not iso:
+        return ""
+    try:
+        return datetime.fromisoformat(iso).astimezone(TZ).strftime("%a %b %-d")
+    except ValueError:
+        return ""
+
+
+def context_preamble(conn):
+    """Compact 'world snapshot' injected into extraction so the small model resolves
+    people, task ownership, vague references, and dups by RETRIEVAL not guesswork
+    (ADR-038): who's 'me' and how others relate, what's already on the list, and a
+    rolling note of what's been happening lately."""
+    parts = []
+    roster = db.speaker_roster(conn)
+    if roster:
+        ppl = []
+        for r in roster:
+            if r["is_self"]:
+                ppl.append(f'{r["name"]} = the device owner ("me"/"I")')
+            elif r["relationship"]:
+                ppl.append(f'{r["name"]} = {r["relationship"]}')
+            else:
+                ppl.append(r["name"])
+        parts.append("PEOPLE (resolve speaker labels + task ownership with these): "
+                     + "; ".join(ppl))
+    open_tasks = db.list_intents(conn)
+    if open_tasks:
+        rows = []
+        for t in open_tasks[:25]:
+            lab = _due_label(t["due_at"])
+            rows.append(f'- {t["action"]}' + (f" ({lab})" if lab else ""))
+        parts.append("ALREADY ON THE LIST (do NOT recreate these):\n" + "\n".join(rows))
+    recent = db.meta_get(conn, "recent_context")
+    if recent:
+        parts.append("RECENTLY (for resolving 'that thing' / 'the usual'): " + recent)
+    return "\n\n".join(parts)
 
 
 # --- de-duplication: one intent per real-world thing, across all conversations ---
@@ -174,17 +237,25 @@ def seed_demo(conn):
     return tid
 
 
-def run_for_transcript(conn, tid, verbose=False):
+def run_for_transcript(conn, tid, verbose=False, marked=False):
     """Extract action items from transcript `tid` (speaker-aware) and store them.
+    `marked` = the device REC/"remember" button was pressed for this chunk, so its
+    items are deliberate captures (high confidence, never triaged). ADR-038.
     Returns the list of intents. Used by the worker and the CLI."""
     convo = conversation_for(tid)
     now_local = datetime.now(TZ)
     system = SYSTEM % {"now": now_local.strftime("%Y-%m-%d %H:%M (%A)"), "tz": TZ_NAME}
-    raw = ollama_chat(system, convo)
+    preamble = context_preamble(conn)
+    user = (f"CONTEXT:\n{preamble}\n\n" if preamble else "") + f"CONVERSATION:\n{convo}"
+    raw = ollama_chat(system, user)
     data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
     intents = data.get("intents", [])
     triage_thr = db.cfg(conn, "triage_threshold", TRIAGE_THRESHOLD)
     sim_thr = db.cfg(conn, "dedupe_similarity", SIM_THRESHOLD)
+    self_sp = db.get_self(conn)                       # normalize the owner's own name -> "me"
+    self_names = {"me", "myself", "i", "owner"}
+    if self_sp and self_sp["name"]:
+        self_names.add(self_sp["name"].lower())
     stored = []
     for it in intents:
         due = to_utc(it.get("due_local"), it.get("due_text"), now_local)
@@ -200,16 +271,28 @@ def run_for_transcript(conn, tid, verbose=False):
         except (TypeError, ValueError):
             conf = None
         kind = (it.get("kind") or "task").lower()
+        owner = (it.get("owner") or "me").strip() or "me"
+        if owner.lower() in self_names:
+            owner = "me"
+        recurrence = (it.get("recurrence") or "").strip().lower() or None
+        if recurrence in ("none", "null", "no", "false"):
+            recurrence = None
+        # Explicit "remember this" capture (ADR-038): the owner deliberately flagged it
+        # ("remind me…", "note to self…"), so trust it — high confidence, never triaged.
+        flagged = marked or bool(EXPLICIT_MARKERS.search(
+            f'{it.get("source_quote") or ""} {it.get("action") or ""}'))
+        if flagged and (conf is None or conf < 0.95):
+            conf = 0.95
         # Triage (ADR-033): followups only ever hit the digest (low stakes), so they
         # flow straight through. Everything else is gated — uncertain items are held
         # as "suggested" for the Review queue instead of auto-pushed to Google.
         status = ("pending" if kind == "followup" or conf is None or conf >= triage_thr
                   else "suggested")
         conn.execute(
-            "INSERT INTO intents(speaker_id, transcript_id, action, kind, tier, due_at, "
-            "status, source_quote, confidence) VALUES (?,?,?,?,?,?,?,?,?)",
-            (sp["id"] if sp else None, tid, it.get("action"), kind, it.get("tier"),
-             due_iso, status, it.get("source_quote"), conf))
+            "INSERT INTO intents(speaker_id, transcript_id, action, kind, owner, recurrence, "
+            "tier, due_at, status, source_quote, confidence) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (sp["id"] if sp else None, tid, it.get("action"), kind, owner, recurrence,
+             it.get("tier"), due_iso, status, it.get("source_quote"), conf))
         stored.append(it)
         if verbose:
             due_str = due.strftime("%Y-%m-%d %H:%M UTC") if due else "(no time)"
@@ -217,6 +300,40 @@ def run_for_transcript(conn, tid, verbose=False):
                   f"({it.get('speaker')}, due {due_str})")
     conn.commit()
     return stored
+
+
+RECENT_SYSTEM = """You keep a SHORT running note of what's going on in the owner's
+day so later snippets can resolve references like "that", "the thing", "the usual".
+Given the PRIOR note and a NEW snippet, return ONLY JSON {"recent": str}: a terse note
+(<= ~70 words) merging the new snippet in — people, plans, decisions, open threads.
+Drop stale detail. This is CONTEXT, not a task list."""
+
+RECENT_MAX_GAP_S = 4 * 3600     # quiet this long → start a fresh "session" note
+
+
+def update_recent_context(conn, tid):
+    """Maintain a small rolling 'what's been happening' note in meta (ADR-038),
+    fed into the next chunk's extraction context. Session-decays after a quiet gap."""
+    convo = conversation_for(tid)
+    if not convo.strip():
+        return
+    prior = db.meta_get(conn, "recent_context", "")
+    last = db.meta_get(conn, "recent_context_at")
+    if last:
+        try:
+            if (datetime.now(UTC) - datetime.fromisoformat(last)).total_seconds() > RECENT_MAX_GAP_S:
+                prior = ""                       # new session — don't carry stale context
+        except ValueError:
+            pass
+    try:
+        raw = ollama_chat(RECENT_SYSTEM, json.dumps({"prior_note": prior, "new_snippet": convo}))
+        note = (json.loads(raw[raw.find("{"):raw.rfind("}") + 1]).get("recent") or "").strip()[:600]
+    except Exception as e:  # noqa: BLE001 — context is best-effort, never fail the chunk
+        print(f"recent-context update skipped: {e}", flush=True)
+        return
+    if note:
+        db.meta_set(conn, "recent_context", note)
+        db.meta_set(conn, "recent_context_at", datetime.now(UTC).isoformat())
 
 
 RECONCILE_SYSTEM = """You decide whether a new conversation RESOLVES any of a
@@ -297,9 +414,9 @@ def add_manual(conn, text):
     Calendar/Tasks like a spoken one. Returns the new intent id."""
     now_local = datetime.now(TZ)
     system = SYSTEM % {"now": now_local.strftime("%Y-%m-%d %H:%M (%A)"), "tz": TZ_NAME}
-    action, kind, tier, due_iso = text, "task", "SOON", None
+    action, kind, tier, due_iso, recurrence = text, "task", "SOON", None, None
     try:
-        raw = ollama_chat(system, f"Me: {text}")
+        raw = ollama_chat(system, f"CONVERSATION:\nMe: {text}")
         data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
         items = data.get("intents") or []
         if items:
@@ -309,13 +426,16 @@ def add_manual(conn, text):
             kind = it.get("kind") or "task"
             tier = it.get("tier") or "SOON"
             due_iso = due.isoformat() if due else None
+            recurrence = (it.get("recurrence") or "").strip().lower() or None
+            if recurrence in ("none", "null", "no", "false"):
+                recurrence = None
     except Exception as e:  # noqa: BLE001 — fall back to a plain task
         print(f"add_manual parse failed: {e}")
     sp = db.get_self(conn)
     cur = conn.execute(
-        "INSERT INTO intents(speaker_id, action, kind, tier, due_at, status, "
-        "source_quote, confidence) VALUES (?,?,?,?,?, 'pending', ?, 1.0)",
-        (sp["id"] if sp else None, action, kind, tier, due_iso, text))
+        "INSERT INTO intents(speaker_id, action, kind, owner, recurrence, tier, due_at, "
+        "status, source_quote, confidence) VALUES (?,?,?,'me',?,?,?, 'pending', ?, 1.0)",
+        (sp["id"] if sp else None, action, kind, recurrence, tier, due_iso, text))
     conn.commit()
     return cur.lastrowid
 

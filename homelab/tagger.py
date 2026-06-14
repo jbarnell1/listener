@@ -62,8 +62,17 @@ def tag_transcript(conn, tid):
     convo = _convo(conn, tid)
     if not convo.strip():
         return []
-    existing = [{"name": t["name"], "summary": t["summary"]} for t in db.list_tags(conn)]
-    payload = {"existing_topics": existing[:60], "new_snippet": convo}
+    # Retrieve the most RELEVANT existing topics rather than dumping all of them
+    # (ADR-038): rank by name-token overlap with this snippet, keeping recency order
+    # (list_tags is recency-sorted) as a stable tiebreak; cap the window.
+    low = convo.lower()
+
+    def _overlap(t):
+        return sum(1 for tok in (t["name"] or "").lower().split()
+                   if len(tok) > 2 and tok in low)
+    ranked = sorted(db.list_tags(conn), key=_overlap, reverse=True)[:25]
+    existing = [{"name": t["name"], "summary": t["summary"]} for t in ranked]
+    payload = {"existing_topics": existing, "new_snippet": convo}
     raw = _chat(SYSTEM, json.dumps(payload))
     data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
     names = []

@@ -56,14 +56,15 @@ def normalize(src):
     return out
 
 
-def process_audio_file(audio, conn=None, chunk_id=None):
+def process_audio_file(audio, conn=None, chunk_id=None, marked=False):
     """Full pipeline for one normalized wav. Returns the transcript id."""
     conn = conn or db.connect()
     tid = wordattribute.process_audio(audio, MODEL, chunk_id=chunk_id)
     intents.reconcile_for_transcript(conn, tid)   # close out items this convo resolved (ADR-032)
-    intents.run_for_transcript(conn, tid)
-    profiles.update_for_transcript(conn, tid)
-    tagger.tag_transcript(conn, tid)      # topic tags (ADR-029)
+    intents.run_for_transcript(conn, tid, marked=marked)  # marked = deliberate capture (ADR-038)
+    intents.update_recent_context(conn, tid)      # rolling context for the next chunk (ADR-038)
+    db.mark_speakers_dirty(conn, tid)             # profiles flushed off the hot path (ADR-038)
+    tagger.tag_transcript(conn, tid)              # topic tags (ADR-029)
     try:                                  # push events/tasks to Google (ADR-026)
         google_sync.sync_pending(conn)
     except Exception as e:  # noqa: BLE001 — Google issues must not fail the chunk
@@ -75,7 +76,7 @@ def process_chunk(conn, chunk):
     cid = chunk["id"]
     _status("processing", f"chunk #{cid}", chunk=cid)
     wav = normalize(chunk["path"])
-    tid = process_audio_file(wav, conn, chunk_id=cid)
+    tid = process_audio_file(wav, conn, chunk_id=cid, marked=bool(chunk["marked"]))
     db.mark_chunk_done(conn, cid)
     _status("idle", f"done chunk #{cid} → transcript #{tid}", last_tid=tid)
 

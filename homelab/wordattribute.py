@@ -49,7 +49,14 @@ def process_audio(audio, model="large-v3", chunk_id=None, verbose=False):
     responsible for the GPU gate). `chunk_id` links it back to the ingested chunk."""
     if verbose:
         print("[1/2] whisperx transcribe + align (cu128) ...", file=sys.stderr, flush=True)
-    words = run_json(WX_PY, "wx_align.py", audio, model)
+    # Name-bias the decoder with known speakers + pass tunable no-speech gates (ADR-038)
+    _c = db.connect()
+    _names = ",".join(r["name"] for r in db.enrolled_speakers(_c))
+    _extra = ["--nospeech", str(db.cfg(_c, "asr_no_speech_max", 0.6)),
+              "--minlogprob", str(db.cfg(_c, "asr_min_logprob", -1.0))]
+    if _names:
+        _extra = ["--names", _names] + _extra
+    words = run_json(WX_PY, "wx_align.py", audio, model, *_extra)
     if verbose:
         print("[2/2] diarize + identify       (cu13)  ...", file=sys.stderr, flush=True)
     turns = run_json(DIAR_PY, "identify.py", audio)

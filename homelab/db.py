@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS speakers (
   status         TEXT NOT NULL DEFAULT 'unknown',   -- enrolled | unknown
   do_not_profile INTEGER NOT NULL DEFAULT 0,        -- Q-S5 opt-out
   is_self        INTEGER NOT NULL DEFAULT 0,        -- the device owner ("myself")
+  profile_dirty  INTEGER NOT NULL DEFAULT 0,        -- needs a (debounced) profile refresh, ADR-038
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS chunks (
   device      TEXT, seq INTEGER, ts_start TEXT, codec TEXT,
   bytes       INTEGER, path TEXT,
   acked       INTEGER NOT NULL DEFAULT 0,
+  marked      INTEGER NOT NULL DEFAULT 0,    -- device REC/"remember" press → deliberate capture (ADR-038)
   transcribed INTEGER NOT NULL DEFAULT 0,    -- 0 pending · 1 done · -1 failed
   attempts    INTEGER NOT NULL DEFAULT 0,
   error       TEXT,
@@ -76,6 +78,8 @@ CREATE TABLE IF NOT EXISTS intents (
   speaker_id   INTEGER REFERENCES speakers(id),
   action       TEXT, tier TEXT, due_at TEXT,        -- due_at stored UTC (ADR-017)
   kind         TEXT,                                -- event | task | followup (ADR-026)
+  owner        TEXT,                                -- who is responsible (name or "me"); ADR-038
+  recurrence   TEXT,                                -- none|daily|weekly:TU|monthly… (ADR-038)
   status       TEXT NOT NULL DEFAULT 'pending',     -- pending|suggested|dismissed
   source_quote TEXT,
   confidence   REAL,                                -- extraction confidence (triage, ADR-033)
@@ -126,6 +130,8 @@ def _migrate(conn):
         return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
     if "is_self" not in cols("speakers"):
         conn.execute("ALTER TABLE speakers ADD COLUMN is_self INTEGER NOT NULL DEFAULT 0")
+    if "profile_dirty" not in cols("speakers"):
+        conn.execute("ALTER TABLE speakers ADD COLUMN profile_dirty INTEGER NOT NULL DEFAULT 0")
     have = cols("profiles")
     for col in ("facts_json", "traits_json", "interests_json", "dislikes_json",
                 "dates_json", "notable_json", "topics_json", "recurring_json"):
@@ -136,9 +142,11 @@ def _migrate(conn):
         conn.execute("ALTER TABLE chunks ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
     if "error" not in ch:
         conn.execute("ALTER TABLE chunks ADD COLUMN error TEXT")
+    if "marked" not in ch:
+        conn.execute("ALTER TABLE chunks ADD COLUMN marked INTEGER NOT NULL DEFAULT 0")
     it = cols("intents")
     for col in ("kind", "calendar_event_id", "calendar_link", "gtask_id", "synced_at",
-                "close_kind", "close_note", "closed_at"):
+                "close_kind", "close_note", "closed_at", "owner", "recurrence"):
         if col not in it:
             conn.execute(f"ALTER TABLE intents ADD COLUMN {col} TEXT")
     if "confidence" not in it:
@@ -247,6 +255,14 @@ def rename_speaker(conn, sid, name):
     conn.execute("UPDATE speakers SET name=?, status='enrolled', updated_at=datetime('now') "
                  "WHERE id=?", (name, sid))
     conn.commit()
+
+
+def speaker_roster(conn):
+    """Named people for LLM context — resolves speaker labels + task ownership
+    (who is 'me', who is the wife/coworker/etc.). ADR-038."""
+    return conn.execute(
+        "SELECT name, relationship, is_self FROM speakers "
+        "WHERE status='enrolled' AND name IS NOT NULL ORDER BY is_self DESC, name").fetchall()
 
 
 def list_intents(conn, tier=None):
@@ -547,6 +563,35 @@ def speaker_transcript_ids(conn, sid):
     return [r[0] for r in conn.execute(
         "SELECT DISTINCT transcript_id FROM segments WHERE speaker_id=? "
         "ORDER BY transcript_id", (sid,)).fetchall()]
+
+
+# --- debounced profile refresh (ADR-038): mark dirty per chunk, flush periodically ---
+
+def mark_speakers_dirty(conn, tid):
+    """Flag the named, profile-able speakers in transcript `tid` for a later refresh."""
+    conn.execute(
+        "UPDATE speakers SET profile_dirty=1 WHERE id IN "
+        "(SELECT DISTINCT speaker_id FROM segments WHERE transcript_id=? AND speaker_id IS NOT NULL) "
+        "AND status='enrolled' AND name IS NOT NULL AND do_not_profile=0", (tid,))
+    conn.commit()
+
+
+def dirty_speaker_ids(conn):
+    return [r[0] for r in conn.execute(
+        "SELECT id FROM speakers WHERE profile_dirty=1").fetchall()]
+
+
+def clear_profile_dirty(conn, sid):
+    conn.execute("UPDATE speakers SET profile_dirty=0 WHERE id=?", (sid,))
+    conn.commit()
+
+
+def speaker_transcripts_since(conn, sid, since):
+    """Transcript ids where `sid` spoke, newer than `since` (ISO ts) — for catch-up."""
+    return [r[0] for r in conn.execute(
+        "SELECT DISTINCT s.transcript_id FROM segments s JOIN transcripts t "
+        "ON t.id = s.transcript_id WHERE s.speaker_id=? AND t.created_at > ? "
+        "ORDER BY s.transcript_id", (sid, since or "1970-01-01")).fetchall()]
 
 
 def delete_speaker(conn, sid):

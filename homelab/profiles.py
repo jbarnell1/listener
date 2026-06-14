@@ -144,6 +144,27 @@ def update_for_transcript(conn, tid):
     return done
 
 
+def flush_dirty(conn, max_tx=10):
+    """Refresh every speaker flagged dirty (ADR-038) — runs off the per-chunk hot path
+    (scheduled, GPU-gated), processing only their transcripts since the last refresh so
+    profiles get MORE context per update and fewer total LLM calls. Returns updated sids."""
+    done = []
+    for sid in db.dirty_speaker_ids(conn):
+        try:
+            prof = db.get_profile(conn, sid)
+            since = prof["last_seen"] if prof else None
+            tids = (db.speaker_transcripts_since(conn, sid, since) if since
+                    else db.speaker_transcript_ids(conn, sid))[-max_tx:]
+            for tid in tids:
+                update_profile(conn, sid, tid)
+            db.clear_profile_dirty(conn, sid)
+            if tids:
+                done.append(sid)
+        except Exception as e:  # noqa: BLE001 — one bad speaker shouldn't block the rest
+            print(f"  profile flush failed for speaker {sid}: {e}", flush=True)
+    return done
+
+
 def rebuild_speaker(conn, sid):
     """Replay every transcript a speaker appears in, in order, rebuilding their profile."""
     conn.execute("DELETE FROM profiles WHERE speaker_id=?", (sid,))

@@ -30,7 +30,7 @@
   <div class="row" id="rev-{{ i.id }}" style="--hue:{{ i.speaker_id|hue }}">
     <div class="av">{{ i.who|initials }}</div>
     <div class="grow">
-      <div class="name">{{ i.action }}</div>
+      <div class="name">{% if i.importance and i.importance >= 4 %}⭐ {% endif %}{{ i.action }}</div>
       <div class="muted"><a href="/speakers/{{ i.speaker_id }}">{{ i.who }}</a>{% if i.due_at %} · {{ i.due_at|localtime }}{% endif %}
         · <span class="chip">unsure{% if i.confidence %} · {{ (i.confidence * 100)|int }}%{% endif %}</span></div>
       {% if i.source_quote %}<div class="quote">"{{ i.source_quote }}"</div>{% endif %}

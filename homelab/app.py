@@ -33,6 +33,7 @@ import gpu_gate
 import intents
 import mailer
 import purge
+import reflect
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -212,6 +213,20 @@ def _flush_profiles():
         print(f"profile flush error: {e}", flush=True)
 
 
+def _run_reflection():
+    """Nightly reflection pass (ADR-043), GPU-gated — synthesize recent captures into
+    a few higher-level insights for the dashboard + brief."""
+    try:
+        clear, _ = gpu_gate.peek()
+        if not clear:
+            return
+        import reflect
+        ins = reflect.reflect(db.connect())
+        print(f"reflection: {len(ins)} insight(s)", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"reflection error: {e}", flush=True)
+
+
 def _worker_status():
     try:
         with open("/tmp/listener-worker.json") as f:
@@ -232,6 +247,8 @@ async def lifespan(_app):
                       id="db_backup", replace_existing=True, misfire_grace_time=7200)
     scheduler.add_job(_flush_profiles, CronTrigger(minute=20),
                       id="profile_flush", replace_existing=True, misfire_grace_time=1800)
+    scheduler.add_job(_run_reflection, CronTrigger(hour=23, minute=35),
+                      id="reflection", replace_existing=True, misfire_grace_time=3600)
     scheduler.start()     # nightly brief + 3 AM purge + 3:30 AM DB backup (ADR-030)
     yield
     scheduler.shutdown(wait=False)
@@ -464,6 +481,7 @@ def home(request: Request):
                 enrolled=db.enrolled_speakers(c), transcripts=recents,
                 suggested=db.suggested_intents(c), close_pending=db.close_pending_intents(c),
                 auto_closed=db.recent_auto_closed(c), feedback=_feedback_nudge(c),
+                reflection=reflect.latest(c),
                 rec_tags={r["id"]: db.transcript_tag_list(c, r["id"]) for r in recents})
 
 
@@ -964,6 +982,7 @@ def settings(request: Request, mail: str = ""):
                 mail_to=(os.environ.get("LISTENER_MAIL_TO")
                          or os.environ.get("LISTENER_SMTP_USER") or "—"),
                 brief_time=_fmt_hm(bh, bm), brief_time_val=f"{bh:02d}:{bm:02d}",
+                core_memory=db.meta_get(c, "core_memory", ""),
                 tuning=_tuning_view(c))
 
 
@@ -1025,6 +1044,13 @@ def device_toggle(device_id: str):
     cur = next((d for d in db.list_devices(c) if d["device_id"] == device_id), None)
     if cur is not None:
         db.set_device_active(c, device_id, not cur["active"])
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/settings/core-memory")
+def set_core_memory(core: str = Form("")):
+    """Durable owner facts injected into every extraction (core memory, ADR-043)."""
+    db.meta_set(db.connect(), "core_memory", core.strip()[:1200])
     return RedirectResponse("/settings", status_code=303)
 
 

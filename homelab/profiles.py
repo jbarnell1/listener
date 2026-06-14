@@ -17,11 +17,10 @@ Usage:
 """
 import json
 import sys
-import urllib.request
 
 import db
+import llm
 
-OLLAMA = "http://127.0.0.1:11434/api/chat"
 MODEL = "qwen3:8b"
 LIMITS = {"traits": 10, "interests": 12, "dislikes": 12, "dates": 12, "notable": 12}
 
@@ -63,19 +62,6 @@ CRITICAL rules:
 - Be factual; never invent. Keep lists tight (traits<=10, others<=12)."""
 
 
-def _chat(system, user):
-    body = json.dumps({
-        "model": db.cfg(db.connect(), "llm_model", MODEL),    # hot-swappable (ADR-040)
-        "stream": False, "format": "json", "think": False,
-        "options": {"temperature": 0},
-        "messages": [{"role": "system", "content": system},
-                     {"role": "user", "content": user}],
-    }).encode()
-    req = urllib.request.Request(OLLAMA, body, {"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=180) as r:
-        return json.load(r)["message"]["content"]
-
-
 def _convo(conn, tid):
     rows = db.transcript_segments(conn, tid)
     return "\n".join(f"{r['who']}: {r['text']}" for r in rows)
@@ -110,8 +96,10 @@ def update_profile(conn, sid, tid):
             "important_dates": cur.get("dates"), "notable": cur.get("notable")},
         "new_conversation": convo,
     }
-    raw = _chat(SYSTEM % {"name": sp["name"], "self_note": self_note}, json.dumps(payload))
-    data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
+    data = llm.chat_json(SYSTEM % {"name": sp["name"], "self_note": self_note},
+                         json.dumps(payload), want="summary")    # validate + retry (ADR-043)
+    if not data:                                   # bad/empty response → don't wipe the profile
+        return None
 
     db.upsert_profile(
         conn, sid,

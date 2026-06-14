@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS intents (
   status       TEXT NOT NULL DEFAULT 'pending',     -- pending|suggested|dismissed
   source_quote TEXT,
   confidence   REAL,                                -- extraction confidence (triage, ADR-033)
+  importance   INTEGER,                             -- significance 1-5 (ADR-043)
   close_suggested INTEGER NOT NULL DEFAULT 0,       -- reconciler thinks it's resolved (ADR-032)
   close_kind   TEXT, close_note TEXT, closed_at TEXT,  -- completed|cancelled · evidence · when
   calendar_event_id TEXT, calendar_link TEXT, gtask_id TEXT, synced_at TEXT,  -- Google sync (ADR-026)
@@ -171,6 +172,8 @@ def _migrate(conn):
         conn.execute("ALTER TABLE intents ADD COLUMN close_suggested INTEGER NOT NULL DEFAULT 0")
     if "transcript_id" not in it:
         conn.execute("ALTER TABLE intents ADD COLUMN transcript_id INTEGER")
+    if "importance" not in it:
+        conn.execute("ALTER TABLE intents ADD COLUMN importance INTEGER")
     conn.commit()
 
 
@@ -351,7 +354,8 @@ def suggested_intents(conn):
     return conn.execute(
         "SELECT i.*, COALESCE(sp.name, 'Unknown_' || sp.id, '—') AS who "
         "FROM intents i LEFT JOIN speakers sp ON sp.id = i.speaker_id "
-        "WHERE i.status='suggested' ORDER BY i.created_at DESC, i.id DESC").fetchall()
+        "WHERE i.status='suggested' "
+        "ORDER BY COALESCE(i.importance,3) DESC, i.created_at DESC, i.id DESC").fetchall()
 
 
 def close_pending_intents(conn):

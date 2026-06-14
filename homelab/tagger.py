@@ -14,11 +14,10 @@ read those.
 """
 import json
 import sys
-import urllib.request
 
 import db
+import llm
 
-OLLAMA = "http://127.0.0.1:11434/api/chat"
 MODEL = "qwen3:8b"
 MAX_TAGS = 5
 
@@ -38,19 +37,6 @@ Rules:
   decisions, preferences, and must-haves specifically.
 - Tag only real subjects; skip pure pleasantries. 1-4 tags per snippet is typical;
   if there's truly no substantive topic, return {"tags": []}."""
-
-
-def _chat(system, user):
-    body = json.dumps({
-        "model": db.cfg(db.connect(), "llm_model", MODEL),    # hot-swappable (ADR-040)
-        "stream": False, "format": "json", "think": False,
-        "options": {"temperature": 0},
-        "messages": [{"role": "system", "content": system},
-                     {"role": "user", "content": user}],
-    }).encode()
-    req = urllib.request.Request(OLLAMA, body, {"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=180) as r:
-        return json.load(r)["message"]["content"]
 
 
 def _convo(conn, tid):
@@ -74,8 +60,7 @@ def tag_transcript(conn, tid):
     ranked = sorted(db.list_tags(conn), key=_overlap, reverse=True)[:25]
     existing = [{"name": t["name"], "summary": t["summary"]} for t in ranked]
     payload = {"existing_topics": existing, "new_snippet": convo}
-    raw = _chat(SYSTEM, json.dumps(payload))
-    data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
+    data = llm.chat_json(SYSTEM, json.dumps(payload), want="tags")    # validate + retry (ADR-043)
     names = []
     for t in (data.get("tags") or [])[:MAX_TAGS]:
         name = (t.get("name") or "").strip().lower()

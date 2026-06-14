@@ -19,6 +19,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import db
+import llm
 
 TZ_NAME = "America/Chicago"
 TZ = ZoneInfo(TZ_NAME)
@@ -41,7 +42,8 @@ EXPLICIT_MARKERS = re.compile(
 SYSTEM = """You extract action items and follow-ups from a conversation transcript.
 Return ONLY JSON: {"intents":[{"action": str, "kind": "event"|"task"|"followup",
 "tier": "SOON"|"LATER", "speaker": str, "owner": str, "due_text": str|null,
-"due_local": str|null, "recurrence": str|null, "source_quote": str, "confidence": number}]}.
+"due_local": str|null, "recurrence": str|null, "source_quote": str, "confidence": number,
+"importance": number}]}.
 
 Use the CONTEXT block in the user message (the people, what's already on the list, and
 what's been happening lately) to resolve who's who, whose task it is, and vague references.
@@ -77,6 +79,9 @@ Rules:
 - confidence (0-1) = how sure this is a REAL, intended commitment/plan (not a casual
   hypothetical, joke, or aside). Firm explicit task/plan ~0.9+; "maybe someday" ~0.4.
   This gates whether it is auto-added or held for the person to confirm.
+- importance (1-5) = how CONSEQUENTIAL this is to the person's life — 5 = major (health,
+  money, relationships, hard deadlines), 3 = normal, 1 = trivial/mundane. SEPARATE from
+  urgency (tier); used to decide what surfaces first.
 - Don't recreate something already on the list (see CONTEXT). None → {"intents":[]}.
 """
 
@@ -86,17 +91,8 @@ Sarah: Also don't forget dinner with my parents this Saturday at 6.
 Jon: Got it. And I need to call the dentist tomorrow to reschedule my cleaning."""
 
 
-def ollama_chat(system, user):
-    body = json.dumps({
-        "model": db.cfg(db.connect(), "llm_model", MODEL),    # hot-swappable (ADR-040)
-        "stream": False, "format": "json", "think": False,
-        "options": {"temperature": 0},
-        "messages": [{"role": "system", "content": system},
-                     {"role": "user", "content": user}],
-    }).encode()
-    req = urllib.request.Request(OLLAMA, body, {"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=180) as r:
-        return json.load(r)["message"]["content"]
+def ollama_chat(system, user):                       # back-compat shim → shared layer
+    return llm.chat(system, user)
 
 
 def to_utc(due_local, due_text, now_local):
@@ -141,6 +137,9 @@ def context_preamble(conn, convo=""):
     rolling note of what's been happening lately. The open-task list is RELEVANCE-RANKED
     against this chunk and capped (ADR-041) so the context never becomes the noise."""
     parts = []
+    core = (db.meta_get(conn, "core_memory") or "").strip()
+    if core:                                          # durable owner facts (core memory, ADR-043)
+        parts.append("ABOUT THE OWNER (durable facts to rely on): " + core)
     roster = db.speaker_roster(conn)
     if roster:
         ppl = []
@@ -157,10 +156,11 @@ def context_preamble(conn, convo=""):
     if open_tasks:
         low = (convo or "").lower()
 
-        def _rel(t):                                  # tasks this chunk likely refers to, first
-            return sum(1 for tok in (t["action"] or "").lower().split()
-                       if len(tok) > 3 and tok in low)
-        ranked = sorted(open_tasks, key=_rel, reverse=True)[:CTX_MAX_TASKS]
+        def _score(t):                                # relevance to this chunk, then importance
+            rel = sum(1 for tok in (t["action"] or "").lower().split()
+                      if len(tok) > 3 and tok in low)
+            return (rel, t["importance"] or 3)
+        ranked = sorted(open_tasks, key=_score, reverse=True)[:CTX_MAX_TASKS]
         rows = [f'- {t["action"]}' + (f" ({_due_label(t['due_at'])})" if t["due_at"] else "")
                 for t in ranked]
         more = len(open_tasks) - len(ranked)
@@ -259,8 +259,7 @@ def run_for_transcript(conn, tid, verbose=False, marked=False):
     system = SYSTEM % {"now": now_local.strftime("%Y-%m-%d %H:%M (%A)"), "tz": TZ_NAME}
     preamble = context_preamble(conn, convo)
     user = (f"CONTEXT:\n{preamble}\n\n" if preamble else "") + f"CONVERSATION:\n{convo}"
-    raw = ollama_chat(system, user)
-    data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
+    data = llm.chat_json(system, user, want="intents")   # validate + retry (ADR-043)
     intents = data.get("intents", [])
     triage_thr = db.cfg(conn, "triage_threshold", TRIAGE_THRESHOLD)
     sim_thr = db.cfg(conn, "dedupe_similarity", SIM_THRESHOLD)
@@ -295,6 +294,13 @@ def run_for_transcript(conn, tid, verbose=False, marked=False):
             f'{it.get("source_quote") or ""} {it.get("action") or ""}'))
         if flagged and (conf is None or conf < 0.95):
             conf = 0.95
+        # Importance (ADR-043): significance, not urgency — drives review order + context
+        # ranking. LLM-scored 1-5, with a sensible heuristic when missing.
+        try:
+            importance = int(round(float(it.get("importance"))))
+        except (TypeError, ValueError):
+            importance = 4 if flagged else (2 if kind == "followup" else (3 if due_iso else 3))
+        importance = max(1, min(5, importance))
         # Triage (ADR-033): followups only ever hit the digest (low stakes), so they
         # flow straight through. Everything else is gated — uncertain items are held
         # as "suggested" for the Review queue instead of auto-pushed to Google.
@@ -302,9 +308,10 @@ def run_for_transcript(conn, tid, verbose=False, marked=False):
                   else "suggested")
         conn.execute(
             "INSERT INTO intents(speaker_id, transcript_id, action, kind, owner, recurrence, "
-            "tier, due_at, status, source_quote, confidence) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "tier, due_at, status, source_quote, confidence, importance) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (sp["id"] if sp else None, tid, it.get("action"), kind, owner, recurrence,
-             it.get("tier"), due_iso, status, it.get("source_quote"), conf))
+             it.get("tier"), due_iso, status, it.get("source_quote"), conf, importance))
         stored.append(it)
         if verbose:
             due_str = due.strftime("%Y-%m-%d %H:%M UTC") if due else "(no time)"
@@ -337,12 +344,8 @@ def update_recent_context(conn, tid):
                 prior = ""                       # new session — don't carry stale context
         except ValueError:
             pass
-    try:
-        raw = ollama_chat(RECENT_SYSTEM, json.dumps({"prior_note": prior, "new_snippet": convo}))
-        note = (json.loads(raw[raw.find("{"):raw.rfind("}") + 1]).get("recent") or "").strip()[:600]
-    except Exception as e:  # noqa: BLE001 — context is best-effort, never fail the chunk
-        print(f"recent-context update skipped: {e}", flush=True)
-        return
+    note = (llm.chat_json(RECENT_SYSTEM, json.dumps({"prior_note": prior, "new_snippet": convo}),
+                          want="recent").get("recent") or "").strip()[:600]
     if note:
         db.meta_set(conn, "recent_context", note)
         db.meta_set(conn, "recent_context_at", datetime.now(UTC).isoformat())
@@ -381,13 +384,8 @@ def reconcile_for_transcript(conn, tid, verbose=False):
         + (f' (due {r["due_at"]})' if r["due_at"] else "")
         for r in open_items)
     convo = conversation_for(tid)
-    try:
-        raw = ollama_chat(RECONCILE_SYSTEM, f"OPEN ITEMS:\n{listing}\n\nNEW CONVERSATION:\n{convo}")
-        data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
-    except Exception as e:  # noqa: BLE001 — reconciliation must never fail the chunk
-        if verbose:
-            print(f"reconcile: skipped ({e})")
-        return []
+    data = llm.chat_json(RECONCILE_SYSTEM,                # validate + retry (ADR-043)
+                         f"OPEN ITEMS:\n{listing}\n\nNEW CONVERSATION:\n{convo}", want="resolved")
 
     import google_sync
     close_thr = db.cfg(conn, "close_threshold", CLOSE_THRESHOLD)
@@ -428,8 +426,7 @@ def add_manual(conn, text):
     system = SYSTEM % {"now": now_local.strftime("%Y-%m-%d %H:%M (%A)"), "tz": TZ_NAME}
     action, kind, tier, due_iso, recurrence = text, "task", "SOON", None, None
     try:
-        raw = ollama_chat(system, f"CONVERSATION:\nMe: {text}")
-        data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
+        data = llm.chat_json(system, f"CONVERSATION:\nMe: {text}", want="intents")
         items = data.get("intents") or []
         if items:
             it = items[0]
@@ -446,7 +443,8 @@ def add_manual(conn, text):
     sp = db.get_self(conn)
     cur = conn.execute(
         "INSERT INTO intents(speaker_id, action, kind, owner, recurrence, tier, due_at, "
-        "status, source_quote, confidence) VALUES (?,?,?,'me',?,?,?, 'pending', ?, 1.0)",
+        "status, source_quote, confidence, importance) "
+        "VALUES (?,?,?,'me',?,?,?, 'pending', ?, 1.0, 3)",
         (sp["id"] if sp else None, action, kind, recurrence, tier, due_iso, text))
     conn.commit()
     return cur.lastrowid

@@ -188,6 +188,17 @@
   {% endif %}
 </div>
 
+<div class="card">
+  <h2>🧠 About me <span class="muted" style="font-weight:400;font-size:.78rem">· core memory</span></h2>
+  <p class="muted" style="margin:0 0 10px">Durable facts about you that ground <b>every</b>
+  extraction — work schedule, household, preferences, how you refer to places/people. The
+  model sees this on every conversation, so keep it short and stable.</p>
+  <form method="post" action="/settings/core-memory">
+    <textarea name="core" rows="5" placeholder="- I work from home Tuesdays and Thursdays&#10;- My wife is Moriah; our dog is Biscuit&#10;- I prefer texts over phone calls&#10;- 'the office' = my downtown coworking space">{{ core_memory }}</textarea>
+    <div class="field" style="margin-top:10px"><button class="btn">Save</button></div>
+  </form>
+</div>
+
 <div class="card" style="{{ 'border-color:#4c4329' if calibrating }}">
   <h2>🧪 Calibration mode</h2>
   {% if calibrating %}

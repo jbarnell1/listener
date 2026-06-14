@@ -25,6 +25,7 @@ from email.utils import formataddr
 from zoneinfo import ZoneInfo
 
 import db
+import reflect
 
 TZ = ZoneInfo("America/Chicago")
 UTC = ZoneInfo("UTC")
@@ -81,8 +82,13 @@ def compose_brief(conn=None):
     dated = [r for r in rows if r["due_at"]]
     undated = [r for r in rows if not r["due_at"]]
     day = datetime.now(TZ).strftime("%A, %B %-d")
+    insights = reflect.latest(conn)
 
     lines = [f"Listener — your brief for {day}", ""]
+    if insights:
+        lines.append("Patterns:")
+        lines += [f"  • {s}" for s in insights]
+        lines.append("")
     if dated:
         lines.append("Coming up (also on your Calendar / Tasks):")
         lines += [f"  - {t['action']}  ({t['who']} · {_local(t['due_at'])})" for t in dated]
@@ -102,6 +108,10 @@ def compose_brief(conn=None):
     html = ["<div style='font-family:system-ui,Segoe UI,sans-serif;max-width:560px'>",
             "<h2 style='margin:0 0 2px'>Your brief</h2>",
             f"<div style='color:#8a96a8;margin-bottom:14px'>{day}</div>"]
+    if insights:
+        html.append("<h3 style='margin:14px 0 4px'>Patterns</h3><ul style='padding-left:18px'>")
+        html += [f"<li style='margin:6px 0'>{s}</li>" for s in insights]
+        html.append("</ul>")
     if dated:
         html.append("<h3 style='margin:14px 0 2px'>Coming up</h3>"
                     "<div style='color:#8a96a8;font-size:12px;margin-bottom:4px'>"

@@ -63,6 +63,17 @@
 
 {% include "_review_queue.html" %}
 
+{% if reflection %}
+<div class="card" style="border-color:#3a4a6a">
+  <h2>🔮 Patterns</h2>
+  {% for s in reflection %}
+  <div class="row" style="border:none;padding:6px 0">
+    <div class="av" style="--hue:265">•</div>
+    <div class="grow"><div class="name" style="white-space:normal;font-weight:500">{{ s }}</div></div>
+  </div>{% endfor %}
+</div>
+{% endif %}
+
 {% if review %}
 <div class="card" style="border-color:#3a4a6a">
   <h2>Needs your review</h2>

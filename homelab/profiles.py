@@ -115,7 +115,7 @@ def update_profile(conn, sid, tid):
 
     db.upsert_profile(
         conn, sid,
-        summary=(data.get("summary") or "").strip(),
+        summary=(data.get("summary") or "").strip()[:400],   # bound compounding (ADR-041)
         recent=(data.get("recent") or "").strip(),
         traits=(data.get("traits") or [])[:LIMITS["traits"]],
         interests=(data.get("interests") or [])[:LIMITS["interests"]],

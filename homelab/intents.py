@@ -131,11 +131,15 @@ def _due_label(iso):
         return ""
 
 
-def context_preamble(conn):
+CTX_MAX_TASKS = 15            # bound the open-task list injected into context (ADR-041)
+
+
+def context_preamble(conn, convo=""):
     """Compact 'world snapshot' injected into extraction so the small model resolves
     people, task ownership, vague references, and dups by RETRIEVAL not guesswork
     (ADR-038): who's 'me' and how others relate, what's already on the list, and a
-    rolling note of what's been happening lately."""
+    rolling note of what's been happening lately. The open-task list is RELEVANCE-RANKED
+    against this chunk and capped (ADR-041) so the context never becomes the noise."""
     parts = []
     roster = db.speaker_roster(conn)
     if roster:
@@ -151,10 +155,17 @@ def context_preamble(conn):
                      + "; ".join(ppl))
     open_tasks = db.list_intents(conn)
     if open_tasks:
-        rows = []
-        for t in open_tasks[:25]:
-            lab = _due_label(t["due_at"])
-            rows.append(f'- {t["action"]}' + (f" ({lab})" if lab else ""))
+        low = (convo or "").lower()
+
+        def _rel(t):                                  # tasks this chunk likely refers to, first
+            return sum(1 for tok in (t["action"] or "").lower().split()
+                       if len(tok) > 3 and tok in low)
+        ranked = sorted(open_tasks, key=_rel, reverse=True)[:CTX_MAX_TASKS]
+        rows = [f'- {t["action"]}' + (f" ({_due_label(t['due_at'])})" if t["due_at"] else "")
+                for t in ranked]
+        more = len(open_tasks) - len(ranked)
+        if more > 0:
+            rows.append(f"- (+{more} more not shown)")
         parts.append("ALREADY ON THE LIST (do NOT recreate these):\n" + "\n".join(rows))
     recent = db.meta_get(conn, "recent_context")
     if recent:
@@ -246,7 +257,7 @@ def run_for_transcript(conn, tid, verbose=False, marked=False):
     convo = conversation_for(tid)
     now_local = datetime.now(TZ)
     system = SYSTEM % {"now": now_local.strftime("%Y-%m-%d %H:%M (%A)"), "tz": TZ_NAME}
-    preamble = context_preamble(conn)
+    preamble = context_preamble(conn, convo)
     user = (f"CONTEXT:\n{preamble}\n\n" if preamble else "") + f"CONVERSATION:\n{convo}"
     raw = ollama_chat(system, user)
     data = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])

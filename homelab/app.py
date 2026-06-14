@@ -157,6 +157,10 @@ TUNABLES = [
          "min": 0.2, "max": 0.8, "step": 0.02, "unit": "",
          "help": "How closely a voice must match an enrolled person to be tagged as them. Higher = "
                  "stricter (more new 'unknowns' to name); lower = more eager. New recordings only."},
+        {"key": "wearer_match_threshold", "label": "Wearer-match looseness", "default": 0.35,
+         "min": 0.2, "max": 0.7, "step": 0.02, "unit": "",
+         "help": "Lower, dedicated gate for recognizing YOU (the device owner) first — anchors "
+                 "task ownership even on rough audio. Lower = catches your voice more eagerly."},
     ]),
     ("Performance (gaming)", [
         {"key": "gpu_util_max", "label": "Pause above GPU load", "default": gpu_gate.UTIL_MAX_PCT,
@@ -285,9 +289,10 @@ def page(name, request, **ctx):
         ctx.setdefault("unknown_count", len(db.unknown_speakers(c)))
         ctx.setdefault("device_alert", _device_alert(c))
         ctx.setdefault("consent_ok", bool(db.meta_get(c, "consent_accepted_at")))
+        ctx.setdefault("calibrating", db.meta_get(c, "calibration_mode") == "1")
     except Exception:  # noqa: BLE001
         for k, v in (("new_count", 0), ("review_count", 0), ("unknown_count", 0),
-                     ("device_alert", None), ("consent_ok", True)):
+                     ("device_alert", None), ("consent_ok", True), ("calibrating", False)):
             ctx.setdefault(k, v)
     return tpl.TemplateResponse(request, name, ctx)
 
@@ -360,6 +365,85 @@ def _setup_steps(c):
     ]
 
 
+def _calibration_status(c):
+    """Best-effort graduation checklist for calibration mode (ADR-041)."""
+    n_tx = c.execute("SELECT COUNT(*) FROM transcripts").fetchone()[0]
+    n_named = sum(1 for s in db.list_speakers(c)
+                  if s["status"] == "enrolled" and not s["is_self"])
+    checks = [
+        {"done": bool(db.get_self(c)), "text": "Your voice is enrolled (anchors task ownership)"},
+        {"done": n_tx >= 3, "text": "A few conversations captured & reviewed"},
+        {"done": n_named >= 1, "text": "The people you talk to most are named"},
+    ]
+    return {"checks": checks, "ready": all(x["done"] for x in checks)}
+
+
+@app.post("/settings/calibration/enter")
+def calibration_enter():
+    """Week-one high-precision posture (ADR-041): raise the auto-add bar + pause Google
+    sync so you tune against real audio without flooding the calendar."""
+    c = db.connect()
+    db.meta_set(c, "calibration_mode", "1")
+    db.cfg_set(c, "triage_threshold", 0.85)
+    db.meta_set(c, "google_sync_enabled", "0")
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/settings/calibration/golive")
+def calibration_golive():
+    c = db.connect()
+    db.meta_set(c, "calibration_mode", "0")
+    db.cfg_clear(c, "triage_threshold")          # back to the default bar
+    db.meta_set(c, "google_sync_enabled", "1")
+    try:
+        google_sync.sync_pending(c)              # flush anything that queued up
+    except Exception:  # noqa: BLE001
+        pass
+    return RedirectResponse("/", status_code=303)
+
+
+def _feedback_nudge(c):
+    """Turn Review-queue churn into a tuning suggestion (ADR-041): if you keep
+    dismissing (or keep approving) triaged items, offer a one-tap threshold change."""
+    ack = db.meta_get(c, "feedback_ack_at")
+    if ack:
+        try:
+            if (datetime.now(_UTC) - datetime.fromisoformat(ack)).total_seconds() < 3 * 86400:
+                return None
+        except ValueError:
+            pass
+    st = db.decision_stats(c)
+    if st["total"] < 10:
+        return None
+    cur = db.cfg(c, "triage_threshold", intents.TRIAGE_THRESHOLD)
+    pct = int(st["dismiss_rate"] * 100)
+    if st["dismiss_rate"] >= 0.7 and cur < 0.95:
+        return {"dir": "up", "to": round(min(0.95, cur + 0.05), 2),
+                "text": f"You've dismissed {pct}% of suggestions lately — raise the "
+                        f"auto-add bar so fewer iffy items show up?"}
+    if st["dismiss_rate"] <= 0.2 and cur > 0.5:
+        return {"dir": "down", "to": round(max(0.5, cur - 0.05), 2),
+                "text": f"You've kept {100 - pct}% of suggestions — lower the auto-add bar "
+                        f"so more lands automatically?"}
+    return None
+
+
+@app.post("/feedback/apply")
+def feedback_apply(dir: str = Form("up")):
+    c = db.connect()
+    cur = db.cfg(c, "triage_threshold", intents.TRIAGE_THRESHOLD)
+    new = min(0.95, cur + 0.05) if dir == "up" else max(0.5, cur - 0.05)
+    db.cfg_set(c, "triage_threshold", round(new, 2))
+    db.meta_set(c, "feedback_ack_at", datetime.now(_UTC).isoformat())
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/feedback/dismiss")
+def feedback_dismiss():
+    db.meta_set(db.connect(), "feedback_ack_at", datetime.now(_UTC).isoformat())
+    return RedirectResponse("/", status_code=303)
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     c = db.connect()
@@ -371,13 +455,15 @@ def home(request: Request):
                 "Good afternoon" if hour < 18 else "Good evening")
     recents = db.recent_transcripts(c, 6)
     setup = _setup_steps(c)
+    calibrating = db.meta_get(c, "calibration_mode") == "1"
     return page("home.html", request, active="home", counts=db.counts(c),
+                calibration=_calibration_status(c) if calibrating else None,
                 greeting=greeting, task_groups=_task_groups(allopen), open_count=len(allopen),
                 setup=setup, setup_done=all(s["done"] for s in setup),
                 review=_review_nudges(c), unknowns=unknowns, samples=samples,
                 enrolled=db.enrolled_speakers(c), transcripts=recents,
                 suggested=db.suggested_intents(c), close_pending=db.close_pending_intents(c),
-                auto_closed=db.recent_auto_closed(c),
+                auto_closed=db.recent_auto_closed(c), feedback=_feedback_nudge(c),
                 rec_tags={r["id"]: db.transcript_tag_list(c, r["id"]) for r in recents})
 
 
@@ -508,6 +594,18 @@ def edit_speaker_profile(sid: int, summary: str = Form(""), traits: str = Form("
 def delete_speaker(sid: int):
     db.delete_speaker(db.connect(), sid)
     return RedirectResponse("/speakers", status_code=303)
+
+
+@app.post("/speakers/{sid}/rebuild")
+def rebuild_profile(sid: int):
+    """Rebuild a profile from scratch over all their conversations (ADR-041) — escape
+    hatch if compounding has drifted. GPU-heavy; runs inline (manual, infrequent)."""
+    try:
+        import profiles
+        profiles.rebuild_speaker(db.connect(), sid)
+    except Exception as e:  # noqa: BLE001
+        print(f"rebuild profile {sid} failed: {e}", flush=True)
+    return RedirectResponse(f"/speakers/{sid}", status_code=303)
 
 
 @app.post("/speakers/{sid}/name")
@@ -688,8 +786,10 @@ def tasks(request: Request):
 @app.post("/tasks/{iid}/dismiss")
 def dismiss(request: Request, iid: int):
     c = db.connect()
+    kind, conf, was_sug = db.intent_brief(c, iid)
     google_sync.remove_intent(c, iid)        # also delete the Calendar event / Task
     db.dismiss_intent(c, iid)
+    db.log_decision(c, "dismiss", kind, conf, was_suggested=was_sug)
     if _hx(request):
         return HTMLResponse("")  # HTMX removes the row
     return RedirectResponse("/tasks", status_code=303)
@@ -699,6 +799,8 @@ def dismiss(request: Request, iid: int):
 def approve_all(request: Request):
     """Bulk: add every triaged suggestion to Calendar/Tasks."""
     c = db.connect()
+    for it in db.suggested_intents(c):
+        db.log_decision(c, "approve", it["kind"], it["confidence"], was_suggested=1)
     db.approve_all_suggested(c)
     try:
         google_sync.sync_pending(c)
@@ -710,7 +812,10 @@ def approve_all(request: Request):
 @app.post("/tasks/review/dismiss-all")
 def dismiss_all(request: Request):
     """Bulk: dismiss every triaged suggestion."""
-    db.dismiss_all_suggested(db.connect())
+    c = db.connect()
+    for it in db.suggested_intents(c):
+        db.log_decision(c, "dismiss", it["kind"], it["confidence"], was_suggested=1)
+    db.dismiss_all_suggested(c)
     return RedirectResponse(request.headers.get("referer", "/"), status_code=303)
 
 
@@ -718,7 +823,9 @@ def dismiss_all(request: Request):
 def approve_task(request: Request, iid: int):
     """Promote a triaged 'suggested' item to active → it then pushes to Google."""
     c = db.connect()
+    kind, conf, _ = db.intent_brief(c, iid)
     db.approve_intent(c, iid)
+    db.log_decision(c, "approve", kind, conf, was_suggested=1)
     try:
         google_sync.sync_pending(c)
     except Exception:  # noqa: BLE001

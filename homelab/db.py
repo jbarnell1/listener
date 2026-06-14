@@ -92,6 +92,13 @@ CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+CREATE TABLE IF NOT EXISTS decisions (        -- Review-queue supervision signal (ADR-041)
+  id            INTEGER PRIMARY KEY,
+  action        TEXT NOT NULL,                -- approve | dismiss | confirm_close | keep | undo
+  intent_kind   TEXT, confidence REAL,
+  was_suggested INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS tags (
   id         INTEGER PRIMARY KEY,
   name       TEXT NOT NULL UNIQUE COLLATE NOCASE,   -- topic label (ADR-029)
@@ -378,6 +385,33 @@ def undo_close(conn, iid):
                  "close_note=NULL, close_kind=NULL, synced_at=NULL, "
                  "calendar_event_id=NULL, calendar_link=NULL, gtask_id=NULL WHERE id=?", (iid,))
     conn.commit()
+
+
+def intent_brief(conn, iid):
+    """(kind, confidence, was_suggested) for a single intent — for decision logging."""
+    r = conn.execute("SELECT kind, confidence, status FROM intents WHERE id=?", (iid,)).fetchone()
+    if not r:
+        return None, None, 0
+    return r["kind"], r["confidence"], 1 if r["status"] == "suggested" else 0
+
+
+def log_decision(conn, action, intent_kind=None, confidence=None, was_suggested=0):
+    """Record a Review-queue decision as a supervision signal (ADR-041)."""
+    conn.execute("INSERT INTO decisions(action, intent_kind, confidence, was_suggested) "
+                 "VALUES(?,?,?,?)", (action, intent_kind, confidence, 1 if was_suggested else 0))
+    conn.commit()
+
+
+def decision_stats(conn, days=21):
+    """Approve/dismiss tallies for triaged ('suggested') items over the window."""
+    r = conn.execute(
+        "SELECT SUM(action='approve') AS a, SUM(action='dismiss') AS d FROM decisions "
+        "WHERE was_suggested=1 AND created_at > datetime('now', ?)",
+        (f"-{int(days)} days",)).fetchone()
+    a, d = (r["a"] or 0), (r["d"] or 0)
+    total = a + d
+    return {"approves": a, "dismisses": d, "total": total,
+            "dismiss_rate": (d / total) if total else 0.0}
 
 
 def unsynced_intents(conn):

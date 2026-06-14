@@ -123,6 +123,17 @@ class SpeakerDB:
         `threshold` defaults to the dashboard-tunable voice-match setting (ADR-035)."""
         if threshold is None:
             threshold = db.cfg(self.conn, "voice_match_threshold", MATCH_THRESHOLD)
+        # Wearer-first (ADR-041): the device owner's voice is the closest, strongest
+        # signal on a body-worn mic and the most valuable to get right (task ownership).
+        # Check it against its OWN, looser gate before the general N-way match, so the
+        # wearer is reliably caught even when far-field diarization is shaky.
+        srow = self.conn.execute(
+            "SELECT s.id, s.name, e.vec FROM speakers s JOIN embeddings e "
+            "ON e.speaker_id = s.id AND e.is_centroid = 1 WHERE s.is_self = 1 LIMIT 1").fetchone()
+        if srow is not None:
+            c_self = cosine(emb, _from_blob(srow["vec"]))
+            if c_self >= db.cfg(self.conn, "wearer_match_threshold", 0.35):
+                return self.label(srow["id"], srow["name"]), c_self, srow["id"]
         best = (None, None, -1.0)  # (sid, name, score)
         for r in self._centroids():
             c = cosine(emb, _from_blob(r["vec"]))

@@ -167,6 +167,21 @@
   {% endif %}
 </div>
 
+<div class="card" style="{{ 'border-color:#4c4329' if calibrating }}">
+  <h2>🧪 Calibration mode</h2>
+  {% if calibrating %}
+  <p class="muted" style="margin:0 0 10px"><b>Active</b> — auto-add bar raised, Google sync
+  paused. Review locally; the dashboard shows your graduation checklist. Go live when it's
+  trustworthy.</p>
+  <form method="post" action="/settings/calibration/golive"><button class="btn">🚀 Go live now</button></form>
+  {% else %}
+  <p class="muted" style="margin:0 0 10px">For week one / new hardware: raises the auto-add
+  confidence bar and pauses Google sync so you tune against real audio without flooding your
+  calendar. See the <a href="https://github.com/jbarnell1/listener/blob/main/docs/FIELD-TUNING.md" target="_blank" rel="noopener">field-tuning playbook ↗</a>.</p>
+  <form method="post" action="/settings/calibration/enter"><button class="btn ghost">Enter calibration mode</button></form>
+  {% endif %}
+</div>
+
 <details class="card">
   <summary style="cursor:pointer;display:flex;align-items:center;gap:8px">
     <h2 style="display:inline;margin:0">⚙️ Tuning &amp; behavior</h2>

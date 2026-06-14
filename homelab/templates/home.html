@@ -15,6 +15,24 @@
   <button class="btn">Add</button>
 </form>
 
+{% if calibration %}
+<div class="card" style="border-color:#4c4329">
+  <h2>🧪 Calibration mode</h2>
+  <p class="muted" style="margin:0 0 8px">High-precision tuning: the auto-add bar is raised and
+  Google sync is paused, so you review locally without flooding your calendar. Work the
+  field-tuning loop, then go live.</p>
+  {% for ch in calibration.checks %}
+  <div class="row" style="border:none;padding:5px 0">
+    <div class="av" style="--hue:{{ 150 if ch.done else 40 }}">{{ '✅' if ch.done else '◯' }}</div>
+    <div class="grow"><div class="name" style="white-space:normal{% if ch.done %};opacity:.6{% endif %}">{{ ch.text }}</div></div>
+  </div>{% endfor %}
+  <form method="post" action="/settings/calibration/golive" style="margin-top:10px"
+        onsubmit="return confirm('Go live? Restores the normal auto-add bar and turns Google sync back on.')">
+    <button class="btn" style="width:100%;padding:12px">🚀 Go live</button>
+  </form>
+</div>
+{% endif %}
+
 {% if not setup_done %}
 <div class="card" style="border-color:#2c4d3e">
   <h2>✨ Get set up</h2>
@@ -24,6 +42,22 @@
     <div class="grow"><div class="name" {% if s.done %}style="opacity:.55;text-decoration:line-through"{% endif %}>{{ s.text }}</div></div>
     {% if not s.done %}<span class="chevron">›</span>{% endif %}
   </a>{% endfor %}
+</div>
+{% endif %}
+
+{% if feedback %}
+<div class="card" style="border-color:#3a4a6a">
+  <div class="row" style="border:none;padding:0;gap:10px;flex-wrap:wrap">
+    <div class="av" style="--hue:265">📈</div>
+    <div class="grow"><div class="name" style="white-space:normal">{{ feedback.text }}</div></div>
+    <form method="post" action="/feedback/apply" style="display:inline">
+      <input type="hidden" name="dir" value="{{ feedback.dir }}">
+      <button class="btn" style="padding:8px 13px">Set to {{ feedback.to }}</button>
+    </form>
+    <form method="post" action="/feedback/dismiss" style="display:inline">
+      <button class="btn ghost" style="padding:8px 13px">Not now</button>
+    </form>
+  </div>
 </div>
 {% endif %}
 

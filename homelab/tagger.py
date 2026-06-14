@@ -82,7 +82,7 @@ def tag_transcript(conn, tid):
         if not name:
             continue
         tag_id = db.get_or_create_tag(conn, name)
-        summary = (t.get("summary") or "").strip()
+        summary = (t.get("summary") or "").strip()[:600]     # bound compounding (ADR-041)
         if summary:
             db.set_tag_summary(conn, tag_id, summary)
         db.tag_transcript(conn, tid, tag_id)

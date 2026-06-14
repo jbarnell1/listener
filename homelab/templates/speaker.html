@@ -96,10 +96,18 @@
       <span class="muted" style="font-size:.74rem">The "Lately" mood updates automatically — not editable.</span>
     </form>
   </details>
-  <form method="post" action="/speakers/{{ sp.id }}/profiling" style="margin-top:.8em">
-    {% if sp.do_not_profile %}<button class="btn ghost">Enable profiling</button>
-    {% else %}<button class="btn ghost">Disable profiling</button>{% endif %}
-  </form>
+  <div class="field" style="margin-top:.8em">
+    <form method="post" action="/speakers/{{ sp.id }}/profiling">
+      {% if sp.do_not_profile %}<button class="btn ghost">Enable profiling</button>
+      {% else %}<button class="btn ghost">Disable profiling</button>{% endif %}
+    </form>
+    {% if profile %}
+    <form method="post" action="/speakers/{{ sp.id }}/rebuild"
+          onsubmit="return confirm('Rebuild {{ sp.label }}\'s profile from scratch over all their conversations? Replaces the current one — use this if it has drifted.')">
+      <button class="btn ghost">↻ Rebuild from conversations</button>
+    </form>
+    {% endif %}
+  </div>
 </div>
 
 <div class="card">

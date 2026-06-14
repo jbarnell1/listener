@@ -5,6 +5,23 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-043 — Memory architecture from the literature (robust JSON, core memory, importance, reflection)
+**2026-06-14.** Adopted four well-grounded ideas from agent-memory research, fit to
+Listener's pipeline (issues #26-29). **(#29) Robust JSON** (`llm.py`, Hermes structured-
+output discipline): one shared Ollama layer with **schema-key validation + a single retry**
+("valid JSON only", then `{}` graceful) so the small model's occasional bad output never
+silently drops a chunk's extraction or wipes a profile; also centralizes the hot-swappable
+model. **(#28) Core memory** (MemGPT/Letta): a small, user-editable block of **durable owner
+facts** (Settings → "About me") injected into *every* extraction — the most reliable
+grounding for an 8B model. **(#26) Importance scoring** (Generative Agents): the model
+scores significance 1-5 (heuristic fallback), driving Review-queue order and context
+ranking (relevance, then importance) — separating "a biopsy" from "buy milk". **(#27)
+Reflection** (Generative Agents): a nightly GPU-gated pass synthesizes recent captures into
+2-5 higher-level insights (recurring themes, deferred items) shown on the dashboard
+"Patterns" card + the brief. Builds on ADR-038 (context) / ADR-040 (model) / ADR-041
+(retrieval). Memory tiers are now explicit: **core** (this block) · **recall** (FTS, ADR-042)
+· **archival** (transcripts/topics).
+
 ### ADR-042 — Homelab hardening: per-device keys, third-party privacy, FTS, backlog
 **2026-06-14.** Knocks out the implementable open issues. **Per-device keys (#4):** each
 board gets its own HMAC key with revocation (`devices` table); `/ingest` + `/telemetry`

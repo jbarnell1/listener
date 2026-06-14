@@ -395,8 +395,37 @@ def add_task(action: str = Form("")):
 
 @app.get("/speakers", response_class=HTMLResponse)
 def speakers(request: Request):
+    c = db.connect()
+    allsp = db.list_speakers(c)
+    enrolled = [s for s in allsp if s["status"] == "enrolled"]
+    unknown_n = sum(1 for s in allsp if s["status"] != "enrolled")
     return page("speakers.html", request, active="speakers",
-                speakers=db.list_speakers(db.connect()))
+                enrolled=enrolled, unknown_n=unknown_n)
+
+
+@app.post("/roster/save")
+async def roster_save(request: Request):
+    """Edit the whole known-people roster in one go (ADR-040): names, relationships,
+    and which voice is 'me'. Unknown voices are named on /unknown."""
+    form = await request.form()
+    c = db.connect()
+    self_choice = (form.get("self") or "").strip()
+    for s in db.list_speakers(c):
+        if s["status"] != "enrolled":
+            continue
+        sid = s["id"]
+        name = (form.get(f"name_{sid}") or "").strip()
+        if name and name != (s["name"] or ""):
+            db.rename_speaker(c, sid, name)
+        if str(sid) != self_choice:                 # the 'me' person has no relationship-to-self
+            db.set_relationship(c, sid, (form.get(f"rel_{sid}") or "").strip() or None)
+    if self_choice.isdigit():
+        db.set_self(c, int(self_choice))            # exclusive; clears it from everyone else
+        db.set_relationship(c, int(self_choice), None)
+    else:
+        c.execute("UPDATE speakers SET is_self=0")
+        c.commit()
+    return RedirectResponse("/speakers", status_code=303)
 
 
 @app.get("/speakers/{sid}", response_class=HTMLResponse)
@@ -780,6 +809,7 @@ def settings(request: Request, mail: str = ""):
                 queue=db.queue_stats(c),
                 gpu_clear=gpu_clear, gpu_detail=gpu_detail,
                 asr_model=os.environ.get("LISTENER_ASR_MODEL", "large-v3"),
+                llm_model=db.cfg(c, "llm_model", intents.MODEL),
                 google=google_sync.status(),
                 google_paused=not google_sync.sync_enabled(c),
                 mail_configured=mailer.configured(),
@@ -828,6 +858,16 @@ def reset_tuning():
     c = db.connect()
     for key in _TUNABLE_BY_KEY:
         db.cfg_clear(c, key)
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/settings/llm-model")
+def set_llm_model(model: str = Form("")):
+    """Hot-swap the local pipeline LLM (intents/profiles/tagger) — ADR-040. Read at
+    call time, so it takes effect on the next chunk with no restart."""
+    m = model.strip()
+    if m:
+        db.cfg_set(db.connect(), "llm_model", m)
     return RedirectResponse("/settings", status_code=303)
 
 

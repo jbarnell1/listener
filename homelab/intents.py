@@ -88,7 +88,8 @@ Jon: Got it. And I need to call the dentist tomorrow to reschedule my cleaning."
 
 def ollama_chat(system, user):
     body = json.dumps({
-        "model": MODEL, "stream": False, "format": "json", "think": False,
+        "model": db.cfg(db.connect(), "llm_model", MODEL),    # hot-swappable (ADR-040)
+        "stream": False, "format": "json", "think": False,
         "options": {"temperature": 0},
         "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": user}],

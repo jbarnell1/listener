@@ -214,10 +214,10 @@ def transcript_segments(conn, tid):
 
 def list_speakers(conn):
     return conn.execute(
-        "SELECT sp.id, sp.name, sp.status, sp.relationship, "
+        "SELECT sp.id, sp.name, sp.status, sp.relationship, sp.is_self, sp.do_not_profile, "
         "COALESCE(sp.name, 'Unknown_' || sp.id) AS label, "
         "(SELECT COUNT(*) FROM segments s WHERE s.speaker_id = sp.id) AS n_segments "
-        "FROM speakers sp ORDER BY (sp.status = 'unknown'), sp.id").fetchall()
+        "FROM speakers sp ORDER BY (sp.status = 'unknown'), sp.is_self DESC, sp.id").fetchall()
 
 
 def get_speaker(conn, sid):

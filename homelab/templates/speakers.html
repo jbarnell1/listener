@@ -1,18 +1,59 @@
 {% extends "base.html" %}
 {% block body %}
-<h1 class="page">Speakers</h1>
-<p class="sub">Everyone we've heard. Known voices are recognized automatically.</p>
-<div class="card">
-  {% for s in speakers %}
-    <a href="/speakers/{{ s.id }}" class="row" style="color:inherit;--hue:{{ s.id|hue }}">
+<h1 class="page">People</h1>
+<p class="sub">Your roster — names, relationships, and which voice is you. Used to attribute
+tasks and resolve "my wife asked…". Edit and <b>Save</b>.</p>
+
+{% if unknown_n %}
+<a href="/unknown" class="card" style="display:block;color:inherit;border-color:#4c4329">
+  <div class="row" style="border:none;padding:0">
+    <div class="av" style="--hue:40">?</div>
+    <div class="grow"><div class="name">{{ unknown_n }} unknown voice{{ 's' if unknown_n != 1 }} to name</div>
+      <div class="muted">tap to label them →</div></div>
+    <span class="chevron">›</span>
+  </div>
+</a>
+{% endif %}
+
+{% if enrolled %}
+<form method="post" action="/roster/save">
+  <datalist id="rels">
+    <option>wife</option><option>husband</option><option>partner</option><option>girlfriend</option>
+    <option>boyfriend</option><option>mom</option><option>dad</option><option>son</option>
+    <option>daughter</option><option>sibling</option><option>friend</option><option>coworker</option>
+    <option>boss</option><option>roommate</option><option>neighbor</option>
+  </datalist>
+  {% for s in enrolled %}
+  <div class="card" style="--hue:{{ s.id|hue }}">
+    <div class="row" style="border:none;padding:0 0 10px">
       <div class="av">{{ s.label|initials }}</div>
       <div class="grow">
-        <div class="name">{{ s.label }}</div>
-        <div class="muted">{{ s.n_segments }} segments{% if s.relationship %} · {{ s.relationship }}{% endif %}</div>
+        <input name="name_{{ s.id }}" value="{{ s.name or '' }}" placeholder="Name" autocomplete="off">
       </div>
-      {% if s.status == 'enrolled' %}<span class="chip good">known</span>
-      {% else %}<span class="chip unk">unknown</span>{% endif %}
-    </a>
-  {% else %}<div class="empty">No speakers yet</div>{% endfor %}
-</div>
+      <a class="chip" href="/speakers/{{ s.id }}">profile ›</a>
+    </div>
+    <div class="field" style="align-items:center">
+      <input name="rel_{{ s.id }}" list="rels" value="{{ s.relationship or '' }}"
+             placeholder="relationship (e.g. wife, coworker)"
+             {% if s.is_self %}disabled style="opacity:.45"{% endif %}>
+      <label class="chip {{ 'good' if s.is_self }}" style="cursor:pointer;white-space:nowrap">
+        <input type="radio" name="self" value="{{ s.id }}" {% if s.is_self %}checked{% endif %}
+               style="width:auto;margin-right:5px"> this is me
+      </label>
+      <button class="x" title="Delete this person + their data"
+              formaction="/speakers/{{ s.id }}/delete"
+              onclick="return confirm('Delete {{ s.label }} and all their data? Removes their voiceprint, profile, tasks, and their lines from transcripts.')">🗑</button>
+    </div>
+    <div class="muted" style="font-size:.74rem;margin-top:6px">{{ s.n_segments }} segments{% if s.do_not_profile %} · profiling off{% endif %}</div>
+  </div>
+  {% endfor %}
+  <label class="muted" style="display:flex;align-items:center;gap:7px;margin:2px 4px 14px">
+    <input type="radio" name="self" value="none" style="width:auto"> nobody here is me
+  </label>
+  <button class="btn" style="width:100%;padding:13px">💾 Save roster</button>
+</form>
+{% else %}
+<div class="card"><div class="empty">No known people yet — voices get named on the
+{% if unknown_n %}<a href="/unknown">unknowns page</a>{% else %}unknowns page once captured{% endif %}.</div></div>
+{% endif %}
 {% endblock %}

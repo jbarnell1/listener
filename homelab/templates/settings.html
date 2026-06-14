@@ -77,8 +77,14 @@
     <form method="post" action="/settings/worker/start"><button class="btn ghost">Start</button></form>
     <form method="post" action="/settings/worker/stop"><button class="btn ghost">Stop</button></form>
   </div>
-  <p class="muted" style="margin:.8em 0 0">Drains ingested audio when the GPU is free
-  (pauses while you game — ADR-015). Backlog self-heals after downtime.</p>
+  <form class="field" method="post" action="/settings/llm-model" style="margin-top:10px">
+    <label class="muted" style="align-self:center;white-space:nowrap">Pipeline LLM</label>
+    <input name="model" value="{{ llm_model }}" placeholder="qwen3:8b">
+    <button class="btn ghost">Save model</button>
+  </form>
+  <p class="muted" style="margin:.8em 0 0">Local Ollama model for intents/profiles/tags —
+  hot-swappable, applies on the next chunk (must already be <code>ollama pull</code>ed).
+  Drains audio when the GPU is free (pauses while you game — ADR-015); backlog self-heals.</p>
 </div>
 
 <div class="card">

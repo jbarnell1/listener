@@ -7,6 +7,7 @@ can import it. Run `python db.py` to init + print a summary.
 """
 import json
 import os
+import secrets
 import sqlite3
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -117,6 +118,14 @@ CREATE TABLE IF NOT EXISTS device_status (        -- periodic device telemetry (
   uptime_s   INTEGER, free_heap INTEGER, fw TEXT, seq INTEGER,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS devices (              -- per-device HMAC keys + revocation (ADR-042)
+  device_id  TEXT PRIMARY KEY,
+  key        TEXT NOT NULL,
+  label      TEXT,
+  active     INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  revoked_at TEXT
+);
 """
 
 TABLES = ["speakers", "embeddings", "chunks", "transcripts",
@@ -165,10 +174,34 @@ def _migrate(conn):
     conn.commit()
 
 
+def _init_fts(conn):
+    """Best-effort FTS5 index over segment text for fast search at scale (ADR-042).
+    No-ops if the SQLite build lacks FTS5 — search then falls back to LIKE."""
+    try:
+        conn.executescript("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS segments_fts USING fts5(
+          text, content='segments', content_rowid='id');
+        CREATE TRIGGER IF NOT EXISTS segments_ai AFTER INSERT ON segments BEGIN
+          INSERT INTO segments_fts(rowid, text) VALUES (new.id, new.text); END;
+        CREATE TRIGGER IF NOT EXISTS segments_ad AFTER DELETE ON segments BEGIN
+          INSERT INTO segments_fts(segments_fts, rowid, text) VALUES('delete', old.id, old.text); END;
+        CREATE TRIGGER IF NOT EXISTS segments_au AFTER UPDATE ON segments BEGIN
+          INSERT INTO segments_fts(segments_fts, rowid, text) VALUES('delete', old.id, old.text);
+          INSERT INTO segments_fts(rowid, text) VALUES (new.id, new.text); END;
+        """)
+        if (conn.execute("SELECT COUNT(*) FROM segments").fetchone()[0]
+                != conn.execute("SELECT COUNT(*) FROM segments_fts").fetchone()[0]):
+            conn.execute("INSERT INTO segments_fts(segments_fts) VALUES('rebuild')")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+
 def init_db(path: str = DB_PATH) -> sqlite3.Connection:
     conn = connect(path)
     conn.executescript(SCHEMA)
     _migrate(conn)
+    _init_fts(conn)
     conn.commit()
     return conn
 
@@ -191,18 +224,34 @@ def transcript(conn, tid):
 
 
 def search_transcripts(conn, q, limit=40):
-    """Keyword search across all spoken text; groups matches by conversation."""
+    """Keyword search across all spoken text; groups matches by conversation. Uses FTS5
+    (prefix-AND) when available, else a LIKE scan (ADR-042)."""
     q = (q or "").strip()
     if not q:
         return []
-    like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-    rows = conn.execute(
-        "SELECT s.transcript_id, s.text, t.created_at, "
-        "COALESCE(sp.name, 'Unknown_' || sp.id, '?') AS who "
-        "FROM segments s JOIN transcripts t ON t.id = s.transcript_id "
-        "LEFT JOIN speakers sp ON sp.id = s.speaker_id "
-        "WHERE s.text LIKE ? ESCAPE '\\' "
-        "ORDER BY s.transcript_id DESC, s.t_start LIMIT ?", (like, limit * 5)).fetchall()
+    rows = None
+    try:
+        terms = " ".join(f'"{t}"*' for t in q.split() if t)
+        if terms:
+            rows = conn.execute(
+                "SELECT s.transcript_id, s.text, t.created_at, "
+                "COALESCE(sp.name, 'Unknown_' || sp.id, '?') AS who "
+                "FROM segments_fts f JOIN segments s ON s.id = f.rowid "
+                "JOIN transcripts t ON t.id = s.transcript_id "
+                "LEFT JOIN speakers sp ON sp.id = s.speaker_id "
+                "WHERE segments_fts MATCH ? ORDER BY s.transcript_id DESC, s.t_start LIMIT ?",
+                (terms, limit * 5)).fetchall()
+    except sqlite3.OperationalError:
+        rows = None
+    if rows is None:                                  # FTS unavailable or bad query → LIKE
+        like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        rows = conn.execute(
+            "SELECT s.transcript_id, s.text, t.created_at, "
+            "COALESCE(sp.name, 'Unknown_' || sp.id, '?') AS who "
+            "FROM segments s JOIN transcripts t ON t.id = s.transcript_id "
+            "LEFT JOIN speakers sp ON sp.id = s.speaker_id "
+            "WHERE s.text LIKE ? ESCAPE '\\' "
+            "ORDER BY s.transcript_id DESC, s.t_start LIMIT ?", (like, limit * 5)).fetchall()
     groups = {}
     for r in rows:
         g = groups.setdefault(r["transcript_id"], {
@@ -685,9 +734,10 @@ def mark_chunk_error(conn, cid, err, max_attempts=3):
 def queue_stats(conn):
     row = conn.execute(
         "SELECT SUM(transcribed=0) AS pending, SUM(transcribed=1) AS done, "
-        "SUM(transcribed=-1) AS failed FROM chunks").fetchone()
+        "SUM(transcribed=-1) AS failed, "
+        "MIN(CASE WHEN transcribed=0 THEN created_at END) AS oldest_pending FROM chunks").fetchone()
     return {"pending": row["pending"] or 0, "done": row["done"] or 0,
-            "failed": row["failed"] or 0}
+            "failed": row["failed"] or 0, "oldest_pending": row["oldest_pending"]}
 
 
 # --- device telemetry (ADR-031) ---
@@ -715,6 +765,39 @@ def upsert_device_status(conn, d):
 
 def device_status_list(conn):
     return conn.execute("SELECT * FROM device_status ORDER BY updated_at DESC").fetchall()
+
+
+# --- per-device HMAC keys + revocation (ADR-042) ---
+
+def create_device_key(conn, device_id, label=None):
+    """Issue (or rotate) a per-device key; returns the new key to flash into firmware."""
+    key = secrets.token_hex(32)
+    conn.execute(
+        "INSERT INTO devices(device_id, key, label, active, revoked_at) VALUES(?,?,?,1,NULL) "
+        "ON CONFLICT(device_id) DO UPDATE SET key=excluded.key, label=excluded.label, "
+        "active=1, revoked_at=NULL", (device_id, key, label))
+    conn.commit()
+    return key
+
+
+def device_key(conn, device_id):
+    """The active key for a device, or None if unknown/revoked."""
+    r = conn.execute("SELECT key FROM devices WHERE device_id=? AND active=1",
+                     (device_id,)).fetchone()
+    return r["key"] if r else None
+
+
+def list_devices(conn):
+    return conn.execute(
+        "SELECT device_id, label, active, created_at, revoked_at FROM devices "
+        "ORDER BY active DESC, device_id").fetchall()
+
+
+def set_device_active(conn, device_id, active):
+    conn.execute("UPDATE devices SET active=?, revoked_at=CASE WHEN ? THEN NULL "
+                 "ELSE datetime('now') END WHERE device_id=?",
+                 (1 if active else 0, 1 if active else 0, device_id))
+    conn.commit()
 
 
 def lipo_pct(mv):

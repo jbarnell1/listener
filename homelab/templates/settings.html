@@ -33,6 +33,27 @@
 {% endif %}
 
 <div class="card">
+  <h2>🔑 Device keys</h2>
+  <p class="muted" style="margin:0 0 10px">Per-device HMAC secrets, so a lost board can be
+  <b>revoked on its own</b> without re-keying the rest. A device with no key here still uses
+  the shared secret (legacy, until its firmware is updated to send <code>X-Device</code>).</p>
+  {% for d in device_keys %}
+    <div class="row">
+      <div class="grow"><div class="name">{{ d.device_id }}{% if d.label %} <span class="muted">· {{ d.label }}</span>{% endif %}</div>
+        <div class="muted">{% if d.active %}<span style="color:var(--good)">active</span>{% else %}revoked{% endif %} · issued {{ d.created_at }}</div></div>
+      <form method="post" action="/settings/devices/{{ d.device_id }}/toggle">
+        <button class="btn ghost" style="padding:7px 12px">{{ 'Revoke' if d.active else 'Re-enable' }}</button>
+      </form>
+    </div>
+  {% endfor %}
+  <form class="field" method="post" action="/settings/devices/new" style="margin-top:10px">
+    <input name="device_id" placeholder="device id (e.g. listener-01)" required>
+    <input name="label" placeholder="label (optional)">
+    <button class="btn">Issue key</button>
+  </form>
+</div>
+
+<div class="card">
   <h2>Assistant · MCP server</h2>
   <div class="row" style="border:none;padding-top:0">
     <div class="av" style="--hue:265">✨</div>
@@ -67,7 +88,7 @@
     </div>
   </div>
   <div style="display:flex;flex-wrap:wrap;gap:8px;margin:.6em 0">
-    <span class="chip">queue: {{ queue.pending }} pending</span>
+    <span class="chip">queue: {{ queue.pending }} pending{% if backlog_age %} · oldest {{ backlog_age }}{% endif %}</span>
     <span class="chip good">{{ queue.done }} done</span>
     {% if queue.failed %}<span class="chip unk">{{ queue.failed }} failed</span>{% endif %}
     <span class="chip {{ 'good' if gpu_clear else 'unk' }}">GPU {{ 'clear' if gpu_clear else 'busy' }} · {{ gpu_detail }}</span>

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">Device key issued</h1>
+<p class="sub">For <b>{{ device_id }}</b> — shown <b>once</b>. Flash it into that board's firmware.</p>
+
+<div class="card" style="border-color:#4c4329">
+  <h2>🔑 Secret (copy now)</h2>
+  <p class="muted" style="margin:0 0 8px">This is the only time you'll see it. It replaces the
+  shared secret for this device, so a lost board can be revoked on its own.</p>
+  <input value="{{ key }}" readonly onclick="this.select()"
+         style="font-family:ui-monospace,monospace;font-size:.82rem">
+  <div class="muted" style="font-size:.78rem;margin-top:10px">In firmware: set
+  <code>INGEST_SECRET</code> to this value and send the header <code>X-Device: {{ device_id }}</code>
+  on <code>/ingest</code> and <code>/telemetry</code>.</div>
+  <div class="field" style="margin-top:12px">
+    <a class="btn" href="/settings">Done</a>
+  </div>
+</div>
+{% endblock %}

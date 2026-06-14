@@ -191,9 +191,19 @@ def sync_pending(conn, verbose=False):
     rem = db.cfg(conn, "event_reminder_min", REMIND_MIN)
     n = 0
     for it in db.unsynced_intents(conn):
+        # Privacy (ADR-042): only the wearer's own items go to Google. Someone else's
+        # item stays local (digest + dashboard), and we never send verbatim third-party
+        # speech (the source quote) off the box.
+        owner = (it["owner"] or "me").strip().lower()
+        if owner not in ("me", "myself", "i", ""):
+            db.mark_intent_synced(conn, it["id"])      # local-only; not pushed to Google
+            n += 1
+            if verbose:
+                print(f"  kept local (owner={owner}) {it['action']}")
+            continue
         kind = (it["kind"] or "task").lower()
         rec = it["recurrence"]
-        desc = f'Listener · {it["who"]}: "{it["source_quote"] or ""}"'
+        desc = f'via Listener · {it["who"]}'
         try:
             # A recurring item with a time is most useful as a recurring Calendar event,
             # even if the model called it a "task" (Google Tasks can't recur). ADR-038.

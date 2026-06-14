@@ -113,9 +113,16 @@ phase docs implement it.
   no Tasker, no Flutter (ADR-027).
 
 ## Trust / security boundaries
-- Device holds a per-device secret; every POST is HMAC-signed + timestamped
-  (replay window) over TLS.
-- Funnel exposes only `/ingest`; everything else (dashboard, SSH) stays on the
-  tailnet.
-- Audio at rest on the homelab is access-controlled; retention policy TBD
-  (see open questions).
+- Every device POST is HMAC-signed + timestamped (5-min replay window) over TLS.
+  Keys are **per-device** with revocation (`devices` table, ADR-042): a board sends
+  `X-Device` and signs with its own key, so a lost one can be revoked individually.
+  Devices that don't yet send `X-Device` fall back to a shared secret (legacy, until
+  their firmware is updated). *Firmware-side per-device keys + OTA rotation: issue #11.*
+- Funnel exposes **`/ingest` + `/telemetry`** (both signed); everything else (dashboard,
+  SSH) stays on the tailnet.
+- Audio at rest **auto-deletes after a configurable window (default 30 days, ADR-021/035)**;
+  transcripts/profiles are kept until deleted.
+- **Known gap — at-rest encryption (#5):** `listener.db` (incl. voiceprints), audio
+  chunks, and the B2 mirror are currently **unencrypted on disk**; protect via OS disk
+  encryption / SQLCipher / `rclone crypt` (decision pending: key custody). Third-party-
+  derived items stay **local-only** and verbatim quotes are never sent to Google (ADR-042).

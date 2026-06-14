@@ -940,11 +940,21 @@ def settings(request: Request, mail: str = ""):
     c = db.connect()
     gpu_clear, gpu_detail = gpu_gate.peek()
     bh, bm = _brief_hm(c)
+    qs = db.queue_stats(c)
+    backlog_age = None
+    if qs.get("oldest_pending"):
+        try:
+            dt = datetime.fromisoformat(qs["oldest_pending"]).replace(tzinfo=_UTC)
+            secs = (datetime.now(_UTC) - dt).total_seconds()
+            backlog_age = f"{int(secs // 60)}m" if secs < 3600 else f"{int(secs // 3600)}h"
+        except (ValueError, TypeError):
+            pass
     return page("settings.html", request, active="settings", mail=mail,
                 devices=[_device_view(r) for r in db.device_status_list(c)],
+                device_keys=db.list_devices(c), backlog_age=backlog_age,
                 mcp_running=mcp_mgr.running(), model=assistant.MODEL,
                 worker_running=worker_mgr.running(), worker=_worker_status(),
-                queue=db.queue_stats(c),
+                queue=qs,
                 gpu_clear=gpu_clear, gpu_detail=gpu_detail,
                 asr_model=os.environ.get("LISTENER_ASR_MODEL", "large-v3"),
                 llm_model=db.cfg(c, "llm_model", intents.MODEL),
@@ -996,6 +1006,25 @@ def reset_tuning():
     c = db.connect()
     for key in _TUNABLE_BY_KEY:
         db.cfg_clear(c, key)
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/settings/devices/new", response_class=HTMLResponse)
+def device_new(request: Request, device_id: str = Form(...), label: str = Form("")):
+    """Issue a per-device key (ADR-042). Shown ONCE — flash it into that board's firmware."""
+    did = device_id.strip()
+    if not did:
+        return RedirectResponse("/settings", status_code=303)
+    key = db.create_device_key(db.connect(), did, label.strip() or None)
+    return page("device_key.html", request, active="settings", device_id=did, key=key)
+
+
+@app.post("/settings/devices/{device_id}/toggle")
+def device_toggle(device_id: str):
+    c = db.connect()
+    cur = next((d for d in db.list_devices(c) if d["device_id"] == device_id), None)
+    if cur is not None:
+        db.set_device_active(c, device_id, not cur["active"])
     return RedirectResponse("/settings", status_code=303)
 
 
@@ -1068,15 +1097,25 @@ def segment_audio(seg_id: int):
 
 
 # ---- device endpoints (publicly exposed via Funnel; HMAC-locked) ----
-def _verify_sig(x_ts: str, x_sig: str, body: bytes) -> int:
-    """Shared HMAC + replay-window check for the public device endpoints."""
+def _verify_sig(x_ts: str, x_sig: str, body: bytes, device_id: str = "") -> int:
+    """HMAC + replay-window check for the public device endpoints. Uses the device's
+    **per-device key** when it identifies itself (X-Device) so a lost board can be
+    revoked individually (ADR-042); falls back to the legacy shared secret for devices
+    that don't yet send an id (pre per-device firmware)."""
     try:
         ts = int(x_ts)
     except ValueError:
         raise HTTPException(401, "bad ts")
     if abs(time.time() - ts) > 300:
         raise HTTPException(401, "stale timestamp")
-    mac = hmac.new(INGEST_SECRET.encode(), f"{ts}".encode() + body, hashlib.sha256).hexdigest()
+    key = None
+    if device_id:
+        key = db.device_key(db.connect(), device_id)
+        if key is None:                          # named but unknown/revoked → reject
+            raise HTTPException(401, "unknown or revoked device")
+    if key is None:
+        key = INGEST_SECRET                      # legacy shared secret
+    mac = hmac.new(key.encode(), f"{ts}".encode() + body, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(mac, x_sig):
         raise HTTPException(401, "bad signature")
     return ts
@@ -1084,7 +1123,7 @@ def _verify_sig(x_ts: str, x_sig: str, body: bytes) -> int:
 
 @app.post("/ingest")
 async def ingest(request: Request, x_sig: str = Header(""), x_ts: str = Header(""),
-                 x_seq: str = Header("0"), x_mark: str = Header("0")):
+                 x_seq: str = Header("0"), x_mark: str = Header("0"), x_device: str = Header("")):
     # X-Mark: firmware sets this (e.g. "1") when the user pressed the REC/"remember"
     # button during this chunk → its items are deliberate captures (ADR-038).
     try:
@@ -1093,21 +1132,22 @@ async def ingest(request: Request, x_sig: str = Header(""), x_ts: str = Header("
         raise HTTPException(400, "client disconnected")
     if len(body) > 25 * 1024 * 1024:          # size cap on the public endpoint
         raise HTTPException(413, "too large")
-    ts = _verify_sig(x_ts, x_sig, body)
+    ts = _verify_sig(x_ts, x_sig, body, x_device)
     marked = 1 if str(x_mark).strip() not in ("", "0", "false", "False") else 0
     path = os.path.join(CHUNK_DIR, f"chunk_{ts}_{x_seq}.bin")
     with open(path, "wb") as f:
         f.write(body)
     c = db.connect()
     cur = c.cursor()
-    cur.execute("INSERT INTO chunks(seq, ts_start, bytes, path, acked, marked) VALUES (?,?,?,?,1,?)",
-                (int(x_seq), str(ts), len(body), path, marked))
+    cur.execute("INSERT INTO chunks(device, seq, ts_start, bytes, path, acked, marked) "
+                "VALUES (?,?,?,?,?,1,?)", (x_device or None, int(x_seq), str(ts), len(body), path, marked))
     c.commit()
     return {"acked": cur.lastrowid}
 
 
 @app.post("/telemetry")
-async def telemetry(request: Request, x_sig: str = Header(""), x_ts: str = Header("")):
+async def telemetry(request: Request, x_sig: str = Header(""), x_ts: str = Header(""),
+                    x_device: str = Header("")):
     """Periodic device status (battery, signal, uptime…). Tiny + signed; sent more
     often than audio. Stores the latest snapshot per device (ADR-031)."""
     try:
@@ -1116,7 +1156,7 @@ async def telemetry(request: Request, x_sig: str = Header(""), x_ts: str = Heade
         raise HTTPException(400, "client disconnected")
     if len(body) > 4096:
         raise HTTPException(413, "too large")
-    _verify_sig(x_ts, x_sig, body)
+    _verify_sig(x_ts, x_sig, body, x_device)
     try:
         data = json.loads(body)
     except (ValueError, TypeError):

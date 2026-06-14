@@ -41,11 +41,25 @@ status(){
   else echo "  pipeline worker: stopped"; fi
 }
 
+watchdog(){
+  # Self-heal: restart only if the app is actually down (safe no-op when healthy).
+  # Run periodically by a Windows Scheduled Task so a WSL/sleep/reboot can't leave
+  # the homelab silently down (which would fail device /ingest uploads).
+  local wlog="/tmp/listener-watchdog.log"
+  if curl -sf http://127.0.0.1:8000/healthz >/dev/null 2>&1; then
+    echo "$(date '+%F %T') ok" >> "$wlog"
+  else
+    echo "$(date '+%F %T') DOWN — restarting" >> "$wlog"
+    up >> "$wlog" 2>&1
+  fi
+}
+
 case "${1:-up}" in
   up|start)     up ;;
   down|stop)    down ;;
   restart|re)   down; sleep 0.5; up ;;
   status|st)    status ;;
+  watchdog|wd)  watchdog ;;
   logs|log)     tail -n 40 -f "$LOG" ;;
-  *) echo "usage: listener [up|down|restart|status|logs]" ;;
+  *) echo "usage: listener [up|down|restart|status|watchdog|logs]" ;;
 esac

@@ -15,9 +15,20 @@
 | EN | RESET |
 
 ## NAND (W25N01) — standard SPI single-bit (ADR-010)
-Reuses the proven Hub wiring. Quad dropped (Opus data rate is tiny). Uses the
-fast IO-MUX FSPI pins for SCK/MOSI/MISO/CS; IO2/IO3 are tied high, not routed to
-GPIOs — which **frees GPIO9 and GPIO14**.
+Single-bit SPI (Quad dropped — Opus data rate is tiny). Production uses the fast IO-MUX
+FSPI pins for SCK/MOSI/MISO/CS; IO2/IO3 are tied high, not routed to GPIOs — which
+**frees GPIO9 and GPIO14**.
+
+> ⚠️ **Dev board ≠ production NAND pinout.** The prototyping dev board is wired to the
+> *Hub* schematic (`spaceteam_irl`): **SCK=GPIO2, MOSI=GPIO1, MISO=GPIO11, CS=GPIO10**
+> — **confirmed working** (firmware `listener_device_nand`: JEDEC EF AA 21, verify PASS).
+> Production (below) moves NAND to **GPIO12/11/13/10** so GPIO1/2 are free for the **REC
+> (PTT) / MODE buttons**. So on the **dev board, GPIO1/2 are NAND** and the button/PTT
+> (X-Mark capture) path can't be exercised there — test PTT via the keyword path until
+> production boards arrive. **TODO (needs the EasyEDA project / a board in hand): confirm
+> the 5 ordered boards are actually routed GPIO12/11/13/10 before assembling.**
+
+**Production NAND pinout:**
 | Signal | GPIO | NAND pin | Notes |
 |--------|------|----------|-------|
 | SPI_SCK  | GPIO12 | CLK (pin6) | FSPICLK |

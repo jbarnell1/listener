@@ -5,6 +5,23 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-042 — Homelab hardening: per-device keys, third-party privacy, FTS, backlog
+**2026-06-14.** Knocks out the implementable open issues. **Per-device keys (#4):** each
+board gets its own HMAC key with revocation (`devices` table); `/ingest` + `/telemetry`
+verify against the device's key when it sends `X-Device`, falling back to the legacy
+shared secret for devices that don't yet — so a lost board can be revoked individually
+without re-keying the fleet. Settings issues a key (shown once to flash) + revoke/re-enable.
+*(Firmware-side adoption + OTA key rotation: #11.)* **Third-party privacy (#6):** Google
+sync only pushes the **wearer's own** items; someone else's stay local (digest + dashboard),
+and verbatim source quotes are never sent off-box — keeping the local-first promise.
+**Scale (#12):** FTS5 index over segment text (guarded LIKE fallback) for fast search; the
+per-chunk LLM cost was already cut by debounced profiles (ADR-038) + bounded context/
+summaries (ADR-041). **Ops (#9):** oldest-pending-chunk age surfaced on the worker card.
+**Docs (#14):** ARCHITECTURE trust section reconciled with reality, incl. the at-rest-
+encryption gap (#5, key-custody decision pending). Also reconciled the **dev-board vs
+production NAND pinout** in PINOUT.md (dev = Hub GPIO2/1/11/10 confirmed; production =
+GPIO12/11/13/10; physical confirmation of the ordered boards still TODO).
+
 ### ADR-041 — Anti-churn architecture: precision-first, self-correcting capture→useful
 **2026-06-14.** The hard problem isn't smarter ambient extraction — it's that errors are
 **asymmetric** (a wrong calendar entry erodes trust far more than a missed one) and the

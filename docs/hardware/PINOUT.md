@@ -24,9 +24,10 @@ FSPI pins for SCK/MOSI/MISO/CS; IO2/IO3 are tied high, not routed to GPIOs — w
 > — **confirmed working** (firmware `listener_device_nand`: JEDEC EF AA 21, verify PASS).
 > Production (below) moves NAND to **GPIO12/11/13/10** so GPIO1/2 are free for the **REC
 > (PTT) / MODE buttons**. So on the **dev board, GPIO1/2 are NAND** and the button/PTT
-> (X-Mark capture) path can't be exercised there — test PTT via the keyword path until
-> production boards arrive. **TODO (needs the EasyEDA project / a board in hand): confirm
-> the 5 ordered boards are actually routed GPIO12/11/13/10 before assembling.**
+> (X-Mark capture) path can't be exercised there — test PTT via the keyword path on the
+> dev board. **✅ CONFIRMED (2026-06-16) from the EasyEDA schematic:** the fabricated
+> boards route NAND_CS=IO10, SPI_MOSI=IO11, SPI_SCK=IO12, SPI_MISO=IO13, with BTN_USER=IO1
+> / BTN_MODE=IO2 and GPIO33–37 no-connect. Firmware updated to match (`BOARD_DEV 0`).
 
 **Production NAND pinout:**
 | Signal | GPIO | NAND pin | Notes |

@@ -21,10 +21,10 @@
 // ---------- CONFIG (fill in same WiFi + secret as your proto sketch) ----------
 struct Net { const char* ssid; const char* pass; };
 Net networks[] = {
-  { "YOUR_HOME_WIFI",   "YOUR_HOME_PASSWORD" },
-  { "YOUR_PHONE_HOTSPOT", "YOUR_HOTSPOT_PASSWORD" },
+  { "SETUP-4AA8",   "filter0239fence" },
+  { "Pixel_9518", "061798jb" },
 };
-const char* INGEST_SECRET = "PASTE_64_HEX_SECRET_HERE";       // grep LISTENER_INGEST_SECRET ~/.listener.env
+const char* INGEST_SECRET = "b8d33ecb87f1392fb952665b8feede3584a833eaf7eff11dd158a0305d0285df";       // grep LISTENER_INGEST_SECRET ~/.listener.env
 const char* INGEST_URL    = "https://jon-desktop.taildc59f0.ts.net:8443/ingest";
 
 // W25N01 NAND wiring. PRODUCTION board — confirmed from the EasyEDA schematic (ADR-042):

@@ -3,8 +3,10 @@
 // high-confidence item. This is the real capture->pipeline loop on the production board:
 // your voice -> mic -> WAV -> /ingest -> transcript/tasks on the homelab.
 //
-// Real WiFi creds + ingest secret live in secrets.h (GITIGNORED — never committed).
-// Reuses the proven WiFi/NTP/HMAC/upload path from listener_device_proto; adds I2S capture.
+// Real WiFi creds + this board's per-device key live in secrets.h (GITIGNORED).
+// Signs with the per-device key + sends X-Device, so the homelab verifies against this
+// board's own revocable key (ADR-042) — not the shared secret. Reuses the proven
+// WiFi/NTP/HMAC/upload path from listener_device_proto; adds I2S capture.
 //
 // Arduino IDE: ESP32S3 Dev Module, USB CDC On Boot=Enabled, Flash 16MB, PSRAM=OPI PSRAM.
 
@@ -109,17 +111,16 @@ bool captureWav() {
 void upload() {
   if (WiFi.status() != WL_CONNECTED && !connectWiFi()) return;
   String ts  = String((long)time(nullptr));
-  String sig = hmacHex(INGEST_SECRET, ts, wav, WAV_BYTES);
+  String sig = hmacHex(DEVICE_KEY, ts, wav, WAV_BYTES);       // per-device key (ADR-042)
   WiFiClientSecure client; client.setInsecure();              // prototype: skip cert check
   HTTPClient http;
   if (!http.begin(client, INGEST_URL)) { Serial.println("http.begin failed"); return; }
   http.addHeader("Content-Type", "application/octet-stream");
+  http.addHeader("X-Device", DEVICE_ID);                      // server verifies w/ this board's key
   http.addHeader("X-Ts",  ts);
   http.addHeader("X-Sig", sig);
   http.addHeader("X-Seq", String(seq));
   http.addHeader("X-Mark", "1");        // deliberate PTT capture -> bypass triage (ADR-038)
-  // Per-device-key upgrade (ADR-042): add  http.addHeader("X-Device", DEVICE_ID);  and
-  // sign with that device's key (issue it in the dashboard) instead of the shared secret.
   int code = http.POST((uint8_t*)wav, WAV_BYTES);
   String resp = http.getString();
   Serial.printf("ingest seq=%u (%u bytes) -> HTTP %d: %s\n", seq, (unsigned)WAV_BYTES, code, resp.c_str());

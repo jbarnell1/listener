@@ -34,26 +34,32 @@ def _limits():
     except Exception:  # noqa: BLE001 — never let a config read break the gate
         return FREE_MIN_MIB, UTIL_MAX_PCT
 
-# Windows nvidia-smi.exe is on the WSL-appended PATH (System32). Fall back to the
-# common install path if PATH lookup fails.
-_SMI = "nvidia-smi.exe"
-_SMI_FALLBACK = "/mnt/c/Windows/System32/nvidia-smi.exe"
+# Prefer the WSL2-native nvidia-smi: it works WITHOUT Windows interop (which can be off,
+# giving "Exec format error" on the .exe) and reads the physical GPU's real utilization +
+# free VRAM — so it still sees a game driving the card. Fall back to the Windows interop
+# .exe where that's available instead.
+_SMI_CANDIDATES = [
+    "/usr/lib/wsl/lib/nvidia-smi",          # WSL2 native (no interop needed)
+    "nvidia-smi",                           # whatever's on PATH
+    "nvidia-smi.exe",                       # Windows via interop, if enabled
+    "/mnt/c/Windows/System32/nvidia-smi.exe",
+]
 
 
 def _sample():
-    """One (free_MiB, util_pct) reading from the host GPU. Raises on failure."""
-    for exe in (_SMI, _SMI_FALLBACK):
+    """One (free_MiB, util_pct) reading from the GPU. Raises on failure."""
+    for exe in _SMI_CANDIDATES:
         try:
             out = subprocess.run(
                 [exe, "--query-gpu=memory.free,utilization.gpu",
                  "--format=csv,noheader,nounits"],
                 capture_output=True, text=True, timeout=15)
-        except FileNotFoundError:
+        except OSError:                     # missing / not executable (interop off) -> next
             continue
         if out.returncode == 0 and out.stdout.strip():
             free, util = out.stdout.strip().splitlines()[0].split(",")
             return int(free.strip()), int(util.strip())
-    raise RuntimeError("nvidia-smi.exe not available")
+    raise RuntimeError("nvidia-smi not available")
 
 
 def status():

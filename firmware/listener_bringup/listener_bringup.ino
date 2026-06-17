@@ -129,6 +129,7 @@ void setup() {
 bool lastRec = true, lastMode = true;
 uint32_t tLed = 0, tMic = 0;
 bool ledTog = false;
+long micPeak = 0;
 
 void loop() {
   bool r = digitalRead(BTN_REC), m = digitalRead(BTN_MODE);
@@ -142,10 +143,12 @@ void loop() {
     digitalWrite(LED_STAT, !ledTog);
   }
 #if TEST_MIC
-  if (millis() - tMic > 500) {
+  long lvl = micLevel();                       // drain I2S continuously; keep the window peak
+  if (lvl > micPeak) micPeak = lvl;
+  if (millis() - tMic > 5000) {
     tMic = millis();
-    long lvl = micLevel();
-    if (lvl >= 0) Serial.printf("mic level: %ld\n", lvl);
+    Serial.printf("mic level (5s peak): %ld\n", micPeak);
+    micPeak = 0;
   }
 #endif
 }

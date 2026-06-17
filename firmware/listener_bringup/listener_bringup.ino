@@ -84,8 +84,6 @@ void micBegin() {
   I2S.setPins(MIC_BCLK, MIC_WS, -1 /*no DOUT*/, MIC_SD /*DIN*/, -1 /*no MCLK*/);
   micOK = I2S.begin(I2S_MODE_STD, 16000, I2S_DATA_BIT_WIDTH_32BIT,
                     I2S_SLOT_MODE_MONO, I2S_STD_SLOT_LEFT);   // L/R tied GND => LEFT slot
-  Serial.printf("I2S mic : begin [%s]%s\n", micOK ? "OK" : "FAIL",
-                micOK ? " -> talk/snap, watch 'mic level' jump" : "");
 }
 long micLevel() {
   if (!micOK) return -1;
@@ -97,23 +95,35 @@ long micLevel() {
 }
 #endif
 
-void setup() {
-  Serial.begin(115200);
-  delay(1500);
+void report() {
   Serial.println("\n==== Listener board bring-up ====");
   testChip();
   testNand();
   testBattery();
+#if TEST_MIC
+  Serial.printf("I2S mic : begin [%s]%s\n", micOK ? "OK" : "FAIL",
+                micOK ? " -> talk/snap, watch 'mic level' jump" : "");
+#endif
+  Serial.println("Buttons : REC / MODE events below.  LEDs alternate red<->green.");
+  Serial.println("          >>> press REC to RE-PRINT this report <<<");
+}
+
+void setup() {
+  Serial.begin(115200);
+  // Native-USB CDC re-enumerates on every reset, so the Serial Monitor misses early
+  // prints. Wait up to 8s for you to (re)open the monitor, then report; also re-print
+  // on REC press so you can never miss it.
+  unsigned long t0 = millis();
+  while (!Serial && millis() - t0 < 8000) delay(10);
+  delay(300);
   pinMode(BTN_REC, INPUT_PULLUP);
   pinMode(BTN_MODE, INPUT_PULLUP);
   pinMode(LED_REC, OUTPUT);
   pinMode(LED_STAT, OUTPUT);
-  Serial.println("Buttons : press REC / MODE to see events");
-  Serial.println("LEDs    : should alternate red <-> green");
 #if TEST_MIC
   micBegin();
 #endif
-  Serial.println("==== interactive loop ====");
+  report();
 }
 
 bool lastRec = true, lastMode = true;
@@ -122,7 +132,8 @@ bool ledTog = false;
 
 void loop() {
   bool r = digitalRead(BTN_REC), m = digitalRead(BTN_MODE);
-  if (r != lastRec)  { lastRec = r;  Serial.printf("REC  %s\n", r ? "released" : "PRESSED"); }
+  if (r != lastRec)  { lastRec = r;  Serial.printf("REC  %s\n", r ? "released" : "PRESSED");
+                       if (!r) report(); }                 // re-print the report on REC press
   if (m != lastMode) { lastMode = m; Serial.printf("MODE %s\n", m ? "released" : "PRESSED"); }
 
   if (millis() - tLed > 500) {

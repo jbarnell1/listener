@@ -45,8 +45,10 @@ def _rrule(rec):
 SCOPES = ["https://www.googleapis.com/auth/calendar.events",
           "https://www.googleapis.com/auth/tasks"]
 GCP_DIR = os.path.expanduser("~/.listener-gcp")
-CLIENT_SECRET = os.path.join(GCP_DIR, "client_secret.json")
+CLIENT_SECRET = os.path.join(GCP_DIR, "client_secret.json")          # desktop (CLI loopback)
+WEB_CLIENT = os.path.join(GCP_DIR, "client_secret_web.json")         # web (UI flow, ADR-044)
 TOKEN = os.path.join(GCP_DIR, "token.json")
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")             # Google adds 'openid'
 TZ_NAME = "America/Chicago"
 TZ = ZoneInfo(TZ_NAME)
 EVENT_HOURS = 1            # default event duration
@@ -104,6 +106,28 @@ def authorize():
         success_message="Authorized. You can close this tab and return to the terminal.")
     _save(creds)
     print(f"google: authorized; token saved → {TOKEN}")
+
+
+def _web_client_file():
+    """Prefer a dedicated Web OAuth client for the browser flow; fall back to the main one."""
+    return WEB_CLIENT if os.path.exists(WEB_CLIENT) else CLIENT_SECRET
+
+
+def web_auth_url(redirect_uri):
+    """Build Google's consent URL for the in-dashboard (browser) re-auth flow (ADR-044)."""
+    from google_auth_oauthlib.flow import Flow
+    flow = Flow.from_client_secrets_file(_web_client_file(), scopes=SCOPES, redirect_uri=redirect_uri)
+    url, state = flow.authorization_url(access_type="offline",
+                                        include_granted_scopes="true", prompt="consent")
+    return url, state
+
+
+def web_finish(redirect_uri, code):
+    """Exchange the callback `code` for tokens and persist them (browser flow)."""
+    from google_auth_oauthlib.flow import Flow
+    flow = Flow.from_client_secrets_file(_web_client_file(), scopes=SCOPES, redirect_uri=redirect_uri)
+    flow.fetch_token(code=code)
+    _save(flow.credentials)
 
 
 def _svc(name, version, creds):

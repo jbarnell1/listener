@@ -151,6 +151,11 @@
 
 <div class="card">
   <h2>Google Calendar &amp; Tasks</h2>
+  {% if google_msg == 'ok' %}
+    <div class="empty" style="color:var(--good);padding:6px 0">✓ Google reconnected — queued items synced.</div>
+  {% elif google_msg == 'err' %}
+    <div class="empty" style="color:var(--warn);padding:6px 0">⚠ Reconnect failed — check the Web client + redirect URI (see below), then retry. Details in <code>listener logs</code>.</div>
+  {% endif %}
   <div class="row" style="border:none;padding-top:0">
     <div class="av" style="--hue:25">📅</div>
     <div class="grow">
@@ -163,6 +168,17 @@
       <div class="muted">events → Calendar · to-dos → Tasks · undated → email digest</div>
     </div>
   </div>
+  <div class="field" style="margin-top:12px">
+    <a class="btn" href="/google/start">🔗 {{ 'Reconnect' if google.connected else 'Connect' }} Google (here, no CLI)</a>
+  </div>
+  <details style="margin-top:.6em">
+    <summary class="muted" style="cursor:pointer">one-time setup for the in-browser flow</summary>
+    <p class="muted" style="margin:.5em 0 0;font-size:.8rem">Needs a <b>Web</b> OAuth client (the CLI
+    one is Desktop-only). In Google Cloud Console → Credentials → Create OAuth client → <b>Web
+    application</b>; add redirect URI <code>{{ google_redirect }}</code>; download JSON to
+    <code>~/.listener-gcp/client_secret_web.json</code>. Then this button does the whole re-auth
+    from your phone.</p>
+  </details>
   {% if google.connected %}
   <div class="field" style="margin-top:12px">
     <form method="post" action="/settings/google/toggle">

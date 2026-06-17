@@ -667,7 +667,7 @@ def transcript(request: Request, tid: int):
     for s in db.transcript_segments(c, tid):
         if not blocks or blocks[-1]["sid"] != s["speaker_id"]:
             blocks.append({"sid": s["speaker_id"], "who": s["who"], "lines": []})
-        blocks[-1]["lines"].append({"t": s["t_start"], "text": s["text"]})
+        blocks[-1]["lines"].append({"id": s["id"], "t": s["t_start"], "text": s["text"]})
     return page("transcript.html", request, active=None, t=t, blocks=blocks,
                 tags=db.transcript_tag_list(c, tid), all_tags=db.list_tags(c))
 
@@ -954,7 +954,7 @@ def _device_alert(c):
 
 
 @app.get("/settings", response_class=HTMLResponse)
-def settings(request: Request, mail: str = ""):
+def settings(request: Request, mail: str = "", google: str = ""):
     c = db.connect()
     gpu_clear, gpu_detail = gpu_gate.peek()
     bh, bm = _brief_hm(c)
@@ -976,7 +976,8 @@ def settings(request: Request, mail: str = ""):
                 gpu_clear=gpu_clear, gpu_detail=gpu_detail,
                 asr_model=os.environ.get("LISTENER_ASR_MODEL", "large-v3"),
                 llm_model=db.cfg(c, "llm_model", intents.MODEL),
-                google=google_sync.status(),
+                google=google_sync.status(), google_msg=google,
+                google_redirect=_google_redirect(c),
                 google_paused=not google_sync.sync_enabled(c),
                 mail_configured=mailer.configured(),
                 mail_to=(os.environ.get("LISTENER_MAIL_TO")
@@ -1062,6 +1063,44 @@ def set_llm_model(model: str = Form("")):
     if m:
         db.cfg_set(db.connect(), "llm_model", m)
     return RedirectResponse("/settings", status_code=303)
+
+
+GOOGLE_REDIRECT_DEFAULT = "https://jon-desktop.taildc59f0.ts.net/google/callback"
+
+
+def _google_redirect(c):
+    return db.meta_get(c, "google_redirect_uri", GOOGLE_REDIRECT_DEFAULT)
+
+
+@app.get("/google/start")
+def google_start():
+    """Begin the in-dashboard Google re-auth (ADR-044) — works from any tailnet device,
+    no CLI/SSH. Needs a Web OAuth client + the callback URL registered (see Settings note)."""
+    c = db.connect()
+    try:
+        url, state = google_sync.web_auth_url(_google_redirect(c))
+        db.meta_set(c, "google_oauth_state", state)
+        return RedirectResponse(url, status_code=307)
+    except Exception as e:  # noqa: BLE001
+        print(f"google start error: {e}", flush=True)
+        return RedirectResponse("/settings?google=err", status_code=303)
+
+
+@app.get("/google/callback")
+def google_callback(code: str = "", error: str = ""):
+    c = db.connect()
+    if error or not code:
+        return RedirectResponse("/settings?google=err", status_code=303)
+    try:
+        google_sync.web_finish(_google_redirect(c), code)
+        try:
+            google_sync.sync_pending(c)            # flush anything queued, now that we're authed
+        except Exception:  # noqa: BLE001
+            pass
+        return RedirectResponse("/settings?google=ok", status_code=303)
+    except Exception as e:  # noqa: BLE001
+        print(f"google callback error: {e}", flush=True)
+        return RedirectResponse("/settings?google=err", status_code=303)
 
 
 @app.post("/settings/google/toggle")

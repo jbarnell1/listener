@@ -482,6 +482,7 @@ def home(request: Request):
                 suggested=db.suggested_intents(c), close_pending=db.close_pending_intents(c),
                 auto_closed=db.recent_auto_closed(c), feedback=_feedback_nudge(c),
                 reflection=reflect.latest(c),
+                queue=db.queue_stats(c), worker=_worker_status(),
                 rec_tags={r["id"]: db.transcript_tag_list(c, r["id"]) for r in recents})
 
 

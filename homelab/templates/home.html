@@ -10,6 +10,23 @@
   <a href="/activity"><b>{{ new_count }}</b><span>new</span></a>
 </div>
 
+{% if queue.pending or worker.state == 'processing' or worker.state == 'deferred' %}
+<div class="card" id="qbanner" style="border-color:#3a4a6a;display:flex;align-items:center;gap:10px">
+  {% if worker.state == 'processing' %}
+    <span style="font-size:18px">⚙️</span>
+    <div><b>Transcribing now…</b><br><span class="sub" style="margin:0">{{ worker.detail }}</span></div>
+  {% elif worker.state == 'deferred' %}
+    <span style="font-size:18px">⏳</span>
+    <div><b>{{ queue.pending }} clip{{ 's' if queue.pending != 1 }} queued</b> — GPU busy
+      <br><span class="sub" style="margin:0">{{ worker.detail }}</span></div>
+  {% else %}
+    <span style="font-size:18px">⏳</span>
+    <div><b>{{ queue.pending }} clip{{ 's' if queue.pending != 1 }} queued</b> for transcription…</div>
+  {% endif %}
+</div>
+<script>setTimeout(function(){ location.reload(); }, 12000);</script>
+{% endif %}
+
 <form class="field" method="post" action="/tasks/add" style="margin:0 0 18px">
   <input name="action" placeholder="✏️  Add a task…" autocomplete="off" required>
   <button class="btn">Add</button>

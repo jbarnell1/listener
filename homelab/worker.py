@@ -32,7 +32,7 @@ import wordattribute
 
 MODEL = os.environ.get("LISTENER_ASR_MODEL", "large-v3")
 POLL_SECS = int(os.environ.get("LISTENER_WORKER_POLL", "5"))      # idle queue poll
-DEFER_SECS = int(os.environ.get("LISTENER_WORKER_DEFER", "900"))  # wait when GPU busy (15 min)
+DEFER_SECS = int(os.environ.get("LISTENER_WORKER_DEFER", "90"))   # wait when GPU busy (retry fast)
 MAX_ATTEMPTS = 3
 STATUS_FILE = "/tmp/listener-worker.json"
 
@@ -91,7 +91,9 @@ def loop():
             continue
         clear, why = gpu_gate.status()
         if not clear:
-            _status("deferred", f"GPU busy — {why}; retry in {DEFER_SECS//60} min")
+            wait_txt = f"{DEFER_SECS//60} min" if DEFER_SECS >= 60 else f"{DEFER_SECS}s"
+            _status("deferred", f"GPU busy — {why}; retry in {wait_txt}",
+                    pending=db.queue_stats(conn)["pending"])
             time.sleep(DEFER_SECS)
             continue
         try:

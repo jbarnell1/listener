@@ -5,6 +5,20 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-045 — V1 on-device codec = IMA ADPCM (4:1); Opus deferred. Resolves Q-F2
+**2026-06-17.** The continuous-capture firmware encodes with **IMA ADPCM** (4-bit, 4:1
+compression, integer-only, ~no CPU/RAM cost, no external library) wrapped in a WAV
+container the homelab already decodes via ffmpeg `normalize()`. Chose this over on-device
+**Opus** for V1 because there is **no Arduino Opus encoder** for the ESP32-S3 (vendoring
+libopus/esp-adf is a multi-day port with PSRAM/CPU-budget risk) and ADPCM already solves
+the only hard requirement — raw 16 kHz won't fit NAND (ADR-002): 256 kbps → 64 kbps gives
+~17 h on the 128 MB W25N01 and ~14 MB per 30-min batch. Opus stays a **later compression
+pass** (smaller batches → less radio-on time/power) once the continuous loop is proven in
+the field. Matches ADR-002's "ADPCM first, Opus later" guidance and **resolves Q-F2**.
+Firmware staged: prove NAND page write/read/erase round-trip on the assembled board first
+(only the JEDEC ID had been verified), then VAD + PSRAM pre-roll (ADR-003) → ADPCM → NAND
+ring buffer → batched signed upload, radio off between (ADR-018).
+
 ### ADR-044 — In-dashboard Google re-auth + transcript snippet playback
 **2026-06-17.** Two friction fixes. (1) **Re-auth from the UI** instead of SSH/CLI: a
 "Connect/Reconnect Google" button on Settings runs a **web OAuth flow** (`/google/start` →
@@ -522,7 +536,7 @@ part-matching friction. KiCad rejected for relearn cost + manual LCSC mapping.
 
 ### Firmware (block before Phase 3)
 - *Resolved:* Q-F1 → ADR-013 (Arduino / arduino-esp32 v3.x).
-- **Q-F2: Opus vs ADPCM** for v1 — start ADPCM/raw to get the pipeline working,
-  add Opus later for compression. Depends on CPU/power headroom + PSRAM.
+- *Resolved:* Q-F2 → ADR-045 (V1 = IMA ADPCM 4:1; Opus deferred to a later
+  compression pass — no Arduino Opus encoder, and ADPCM already fits NAND).
 - *Resolved:* Q-F3 (upload cadence) → ADR-018 (batched bursts; ~15–30 min on home
   WiFi + on-reconnect + size cap; radio off between).

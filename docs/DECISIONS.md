@@ -5,6 +5,20 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-044 — In-dashboard Google re-auth + transcript snippet playback
+**2026-06-17.** Two friction fixes. (1) **Re-auth from the UI** instead of SSH/CLI: a
+"Connect/Reconnect Google" button on Settings runs a **web OAuth flow** (`/google/start` →
+Google consent → `/google/callback` exchanges the code, saves the token, flushes the
+sync). The redirect URI is the tailnet dashboard URL (`…ts.net/google/callback`), reachable
+because the browser doing the auth is itself on the tailnet — so it works from a phone. This
+needs a **Web** OAuth client (the CLI uses a Desktop client, which only allows loopback
+redirects) with that callback registered; the Settings card documents the one-time setup and
+falls back to the desktop client otherwise. (2) **Transcript playback restored**: each line
+on `/transcripts/{id}` gets a ▶ that plays its `/segment/{id}/audio.wav` snippet via one
+shared player (⌀ if the audio was purged at 30 days). Tokens still require **Production**
+publishing to be long-lived (ADR — Testing = 7-day expiry); this just moves the re-auth
+*action* off the CLI.
+
 ### ADR-043 — Memory architecture from the literature (robust JSON, core memory, importance, reflection)
 **2026-06-14.** Adopted four well-grounded ideas from agent-memory research, fit to
 Listener's pipeline (issues #26-29). **(#29) Robust JSON** (`llm.py`, Hermes structured-

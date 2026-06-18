@@ -10,22 +10,29 @@
   <a href="/activity"><b>{{ new_count }}</b><span>new</span></a>
 </div>
 
-{% if queue.pending or worker.state == 'processing' or worker.state == 'deferred' %}
-<div class="card" id="qbanner" style="border-color:#3a4a6a;display:flex;align-items:center;gap:10px">
-  {% if worker.state == 'processing' %}
-    <span style="font-size:18px">⚙️</span>
-    <div><b>Transcribing now…</b><br><span class="sub" style="margin:0">{{ worker.detail }}</span></div>
-  {% elif worker.state == 'deferred' %}
-    <span style="font-size:18px">⏳</span>
-    <div><b>{{ queue.pending }} clip{{ 's' if queue.pending != 1 }} queued</b> — GPU busy
-      <br><span class="sub" style="margin:0">{{ worker.detail }}</span></div>
-  {% else %}
-    <span style="font-size:18px">⏳</span>
-    <div><b>{{ queue.pending }} clip{{ 's' if queue.pending != 1 }} queued</b> for transcription…</div>
-  {% endif %}
+<div class="card" id="qbanner" style="border-color:#3a4a6a;display:none;align-items:center;gap:10px">
+  <span id="qicon" style="font-size:18px">⏳</span>
+  <div><b id="qmain">…</b><br><span class="sub" id="qdetail" style="margin:0"></span></div>
 </div>
-<script>setTimeout(function(){ location.reload(); }, 12000);</script>
-{% endif %}
+<script>
+// Poll queue status in place — no full-page reload (which caused the flashing).
+(function(){
+  var el=document.getElementById('qbanner');
+  function tick(){
+    fetch('/queue.json',{cache:'no-store'}).then(function(r){return r.json();}).then(function(q){
+      if (q.pending>0 || q.state==='processing' || q.state==='deferred'){
+        el.style.display='flex';
+        var proc = q.state==='processing';
+        document.getElementById('qicon').textContent = proc ? '⚙️' : '⏳';
+        document.getElementById('qmain').textContent = proc ? 'Transcribing now…'
+          : (q.pending + ' clip' + (q.pending===1?'':'s') + ' queued');
+        document.getElementById('qdetail').textContent = q.detail || '';
+      } else { el.style.display='none'; }
+    }).catch(function(){});
+  }
+  tick(); setInterval(tick, 8000);
+})();
+</script>
 
 <form class="field" method="post" action="/tasks/add" style="margin:0 0 18px">
   <input name="action" placeholder="✏️  Add a task…" autocomplete="off" required>

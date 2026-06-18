@@ -1242,6 +1242,15 @@ async def telemetry(request: Request, x_sig: str = Header(""), x_ts: str = Heade
     return {"ok": True}
 
 
+@app.get("/queue.json")
+def queue_json():
+    """Lightweight poll for the dashboard's queued-clips banner (no full-page reload)."""
+    c = db.connect()
+    qs = db.queue_stats(c)
+    w = _worker_status()
+    return {"pending": qs["pending"], "state": w.get("state", ""), "detail": w.get("detail", "")}
+
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True}

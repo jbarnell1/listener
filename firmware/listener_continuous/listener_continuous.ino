@@ -277,20 +277,20 @@ uint32_t lastBatch = 0, lastTelemetry = 0, lastHeartbeat = 0;
 uint32_t lastNetSeenMs = 0;             // for offline-duration telemetry
 
 // ---- comms (per-device key, ADR-042) ----
+// Networks are tried in FIXED priority order: WIFI_NETS[0] = home (primary),
+// [1] = phone hotspot (secondary), etc. Home always wins when it's reachable; the
+// hotspot is only used when home isn't (costs one ~8s home-timeout while you're out).
 bool connectWiFi(){
-  static int lastGood = -1;
-  int order[8]; int m=0;
   int total = sizeof(WIFI_NETS)/sizeof(WIFI_NETS[0]);
-  if (lastGood >= 0 && lastGood < total) order[m++]=lastGood;     // try last-good first
-  for (int i=0;i<total;i++) if (i!=lastGood) order[m++]=i;
-  for (int j=0;j<m;j++){
-    auto& n = WIFI_NETS[order[j]];
+  for (int i=0;i<total;i++){
+    auto& n = WIFI_NETS[i];
     if (!n.ssid || !strlen(n.ssid)) continue;
     WiFi.begin(n.ssid, n.pass);
     uint32_t t0=millis();
-    while (WiFi.status()!=WL_CONNECTED && millis()-t0<10000) delay(250);
-    if (WiFi.status()==WL_CONNECTED){ lastGood=order[j];
-      Serial.printf("WiFi %s IP=%s RSSI=%d\n", n.ssid, WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    while (WiFi.status()!=WL_CONNECTED && millis()-t0<8000) delay(250);
+    if (WiFi.status()==WL_CONNECTED){
+      Serial.printf("WiFi %s (priority %d) IP=%s RSSI=%d\n", n.ssid, i,
+                    WiFi.localIP().toString().c_str(), WiFi.RSSI());
       return true; }
   }
   return false;

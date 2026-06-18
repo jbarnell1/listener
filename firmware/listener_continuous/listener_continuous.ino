@@ -37,7 +37,7 @@
 
 // ---- identity / endpoints ----
 const char* DEVICE_ID     = "listener-01";
-const char* FW_VERSION    = "v0.4-power";
+const char* FW_VERSION    = "v0.5-cadence";
 const char* INGEST_URL    = "https://jon-desktop.taildc59f0.ts.net:8443/ingest";
 const char* TELEMETRY_URL = "https://jon-desktop.taildc59f0.ts.net:8443/telemetry";
 
@@ -64,12 +64,12 @@ const int      FRAME_SAMPLES = 320;     // 20 ms
 const int      PREROLL_MS    = 2000;    // lead-in kept before voice onset
 const int      VAD_HANG_MS   = 6000;    // bridge natural sentence pauses; pipeline stitches longer gaps (ADR-038)
 const int      MIN_SEG_MS    = 500;     // discard blips shorter than this
-const int      MAX_SEG_SEC   = 20;      // force-close long segments
+const int      MAX_SEG_SEC   = 30;      // force-close long segments (fewer, bigger chunks)
 const int32_t  VAD_RMS_ON    = 900;     // frame RMS to start (raise if it triggers on hiss)
 const int32_t  VAD_RMS_OFF   = 700;     // frame RMS to keep alive (hysteresis)
 const int      VAD_ON_FRAMES = 9;       // consecutive 20ms frames above ON to start (rejects clicks)
 #define VAD_DEBUG        1              // 1 = LED_REC tracks segment-active + print peak rms ~1/s
-const uint32_t BATCH_EVERY_MS   = 240000;   // try to drain the ring every 4 min (testing)
+const uint32_t BATCH_EVERY_MS   = 1800000;  // drain ambient capture every 30 min (battery; marked uploads are immediate)
 const uint32_t TELEMETRY_EVERY_MS = 120000; // 2 min (each wake powers the radio; raise to save battery)
 
 // ---- power management (ADR-047) ----
@@ -272,6 +272,7 @@ uint32_t seq = 1;
 bool muted = false;
 bool inSeg = false;
 bool markedSeg = false;                 // REC pressed -> mark the current/next segment
+bool forceDrain = false;                // a marked capture wants to upload now, not in 30 min
 int  hangCount = 0;
 uint32_t lastBatch = 0, lastTelemetry = 0, lastHeartbeat = 0;
 uint32_t lastNetSeenMs = 0;             // for offline-duration telemetry
@@ -371,17 +372,19 @@ void sendTelemetry(){
 
 // ---- one radio-on window: connect, drain the ring + report, radio back off ----
 void serviceNetwork(){
-  bool needDrain = pendCount>0 && (millis()-lastBatch>BATCH_EVERY_MS
+  bool needDrain = pendCount>0 && (forceDrain || millis()-lastBatch>BATCH_EVERY_MS
                                    || ringBufferedBytes() > 8u*1024*1024);
   bool needTelem = millis()-lastTelemetry > TELEMETRY_EVERY_MS;
   if (!needDrain && !needTelem) return;
   if (!wifiOn()){                                    // no network — stay buffered, retry next interval
     Serial.println("net: no network — buffered on NAND");
-    lastBatch=millis(); lastTelemetry=millis();      // back off so we don't hammer the radio
+    lastTelemetry=millis();                          // back off telemetry; keep forceDrain so a
+    if (!forceDrain) lastBatch=millis();             // marked capture keeps trying until it lands
     wifiOff();
     return;
   }
   if (pendCount>0) drainRing();                       // drain everything while we're up
+  forceDrain=false;                                   // delivered (or attempted online)
   sendTelemetry();
   wifiOff();
 }
@@ -395,6 +398,7 @@ void closeSegment(bool marked){
   // copy out of wavOut before ringWrite reuses it? ringWrite reads wavOut directly into NAND — fine,
   // but drainRing also uses wavOut. We only drain during silence, never mid-close, so no overlap.
   ringWrite(wavOut, bytes, seq, marked);     // seq is a label; real seq increments on upload
+  if (marked) forceDrain=true;               // deliberate capture -> upload at the next silence
   segLen=0; inSeg=false; hangCount=0;
 }
 

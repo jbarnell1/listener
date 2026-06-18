@@ -316,6 +316,15 @@ def rename_speaker(conn, sid, name):
     conn.commit()
 
 
+def ignore_speaker(conn, sid):
+    """Dismiss an unknown voice (not a person we care to name). Drops it from the
+    Unknown list + badge; its voiceprint is kept so future matching audio re-attaches
+    here and stays dismissed rather than resurfacing as a new unknown."""
+    conn.execute("UPDATE speakers SET status='ignored', updated_at=datetime('now') "
+                 "WHERE id=?", (sid,))
+    conn.commit()
+
+
 def speaker_roster(conn):
     """Named people for LLM context — resolves speaker labels + task ownership
     (who is 'me', who is the wife/coworker/etc.). ADR-038."""

@@ -776,12 +776,15 @@ async def unknown_batch(request: Request):
         return RedirectResponse("/consent", status_code=303)
     form = await request.form()
     c = db.connect()
-    merged = named = 0
+    merged = named = dismissed = 0
     for r in db.unknown_speakers(c):
         sid = r["id"]
         target = (form.get(f"merge_{sid}") or "").strip()
         name = (form.get(f"name_{sid}") or "").strip()
-        if target:
+        if form.get(f"dismiss_{sid}"):                # "not a person" — dismiss (wins)
+            db.ignore_speaker(c, sid)
+            dismissed += 1
+        elif target:
             try:
                 db.merge_speakers(c, sid, int(target))
                 merged += 1

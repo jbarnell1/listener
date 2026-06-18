@@ -37,6 +37,10 @@ as you like and <b>Save all</b> in one go.</p>
       <div class="field">
         <input name="name_{{ u.id }}" placeholder="…or name as a new person" autocomplete="off">
       </div>
+      <label class="muted" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" name="dismiss_{{ u.id }}" value="1">
+        🚫 Not a person / dismiss — drop this voice (kept so it won't resurface)
+      </label>
     </div>
   </div>
 {% endfor %}

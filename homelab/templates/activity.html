@@ -28,16 +28,23 @@
 
 {% if transcripts %}
 <div class="card">
-  <h2>Conversations processed ({{ transcripts|length }})</h2>
-  {% for t in transcripts %}
-  <a class="row" href="/transcripts/{{ t.id }}">
-    <div class="grow">
-      <div class="name">{{ t.who or 'Transcript #' ~ t.id }}</div>
-      <div class="muted">{{ t.n_segments }} segments · {{ t.created_at|localtime }}</div>
+  <details{% if transcripts|length <= 5 %} open{% endif %}>
+    <summary style="cursor:pointer;list-style:none">
+      <h2 style="display:inline">Conversations processed ({{ transcripts|length }})</h2>
+      <span class="muted" style="font-size:13px"> — tap to {{ 'collapse' if transcripts|length <= 5 else 'expand' }}</span>
+    </summary>
+    <div style="margin-top:8px">
+    {% for t in transcripts %}
+    <a class="row" href="/transcripts/{{ t.id }}">
+      <div class="grow">
+        <div class="name">{{ t.who or 'Transcript #' ~ t.id }}</div>
+        <div class="muted">{{ t.n_segments }} segments · {{ t.created_at|localtime }}</div>
+      </div>
+      <span class="chevron">›</span>
+    </a>
+    {% endfor %}
     </div>
-    <span class="chevron">›</span>
-  </a>
-  {% endfor %}
+  </details>
 </div>
 {% endif %}
 

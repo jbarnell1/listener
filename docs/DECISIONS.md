@@ -5,6 +5,21 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-049 — Warm model servers: load WhisperX/pyannote/ECAPA once, not per chunk
+**2026-06-18.** Root-cause fix for the queue backup: `wx_align.py` and `identify.py` were
+one-shot scripts that **reloaded ~3–6 GB of models on every chunk**, so per-chunk wall-clock
+was dominated by model loading (4–5× *slower* than real-time → unbounded backlog even on
+sparse speech). Both now run as **persistent `--serve` workers** (model cached in VRAM, one
+JSON request per stdin line, result on a sentinel-prefixed stdout line); `wordattribute.py`
+keeps long-lived `Popen` handles and a timeout watchdog that **kills a hung server** (so a
+degenerate chunk still can't wedge the queue, ADR-048). Warm, the pipeline runs ~3× *faster*
+than real-time, and since the device can't generate audio faster than real-time, the queue
+drains faster than it fills — steady-state backup becomes impossible. To respect the shared
+desktop GPU, the worker **unloads the warm models after 180 s idle** (`LISTENER_MODEL_IDLE`),
+reloading on the next batch; the GPU gate still guards against fighting the desktop. WhisperX
+reloads only when the model or name-bias changes; `SpeakerDB` is re-read per request so new
+enrollments take effect immediately. Makes the day/night priority split optional.
+
 ### ADR-048 — Pipeline hardening: skip-on-silence + duration-scaled stage timeouts
 **2026-06-18.** Two cheap guards so a bad chunk can't wedge the (single-threaded) worker
 again (root-caused after the 2.7k overnight backlog + the ECAPA `torch.cat` hang on a
@@ -46,8 +61,11 @@ compression, integer-only, ~no CPU/RAM cost, no external library) wrapped in a W
 container the homelab already decodes via ffmpeg `normalize()`. Chose this over on-device
 **Opus** for V1 because there is **no Arduino Opus encoder** for the ESP32-S3 (vendoring
 libopus/esp-adf is a multi-day port with PSRAM/CPU-budget risk) and ADPCM already solves
-the only hard requirement — raw 16 kHz won't fit NAND (ADR-002): 256 kbps → 64 kbps gives
-~17 h on the 128 MB W25N01 and ~14 MB per 30-min batch. Opus stays a **later compression
+the only hard requirement — raw 16 kHz won't fit NAND (ADR-002): 256 kbps → 64 kbps (8 KB/s) gives
+**~4.6 h of actual recorded audio** on the 128 MB W25N01 (134 MB ÷ 8 KB/s). Because VAD only
+stores speech, that stretches to many more wall-clock hours when speech is sparse (~27%
+speech density ≈ a ~17 h day), but a heavy-talking day can fill the buffer in well under a
+workday — so periodic upload still matters. (Corrects an earlier "~17 h capacity" overstatement.) Opus stays a **later compression
 pass** (smaller batches → less radio-on time/power) once the continuous loop is proven in
 the field. Matches ADR-002's "ADPCM first, Opus later" guidance and **resolves Q-F2**.
 Firmware staged: prove NAND page write/read/erase round-trip on the assembled board first

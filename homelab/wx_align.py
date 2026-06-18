@@ -60,6 +60,91 @@ def _is_hallucination(text):
     return False
 
 
+# --- warm model cache (loaded once, reused across requests in --serve mode, ADR-049) ---
+_MODEL = None
+_MODEL_KEY = None
+_ALIGN = {}
+RESULT = "\x02"          # sentinel prefix marking the JSON result line on stdout
+
+
+def _load_model(model_name, names):
+    """Cache the transcribe model; reload only if the model OR the name-bias changes."""
+    global _MODEL, _MODEL_KEY
+    key = (model_name, names or "")
+    if _MODEL is not None and _MODEL_KEY == key:
+        return _MODEL
+    asr_options = {}
+    namelist = [n.strip() for n in (names or "").split(",") if n.strip()]
+    if namelist:
+        asr_options["initial_prompt"] = "People in this conversation: " + ", ".join(namelist) + "."
+    _MODEL = whisperx.load_model(model_name, DEVICE, compute_type="float16",
+                                 asr_options=asr_options or None)
+    _MODEL_KEY = key
+    return _MODEL
+
+
+def _align_model(lang):
+    if lang not in _ALIGN:
+        _ALIGN[lang] = whisperx.load_align_model(language_code=lang, device=DEVICE)
+    return _ALIGN[lang]
+
+
+def transcribe_words(audio_path, model_name="small.en", names="", nospeech_max=0.6,
+                     min_logprob=-1.0, log=lambda m: None):
+    model = _load_model(model_name, names)
+    audio = whisperx.load_audio(audio_path)
+    log("transcribing ...")
+    result = model.transcribe(audio, batch_size=16)
+    lang = result.get("language", "en")
+    # Gate non-speech / low-confidence / boilerplate BEFORE alignment (ADR-038).
+    kept, dropped = [], 0
+    for s in result.get("segments", []):
+        txt = (s.get("text") or "").strip()
+        nsp = s.get("no_speech_prob")
+        alp = s.get("avg_logprob")
+        if (not txt or _is_hallucination(txt)
+                or (nsp is not None and nsp > nospeech_max)
+                or (alp is not None and alp < min_logprob)):
+            dropped += 1
+            continue
+        kept.append(s)
+    log(f"kept {len(kept)} / {len(result.get('segments', []))} segments ({dropped} dropped)")
+    words = []
+    if kept:
+        log(f"forced alignment (lang={lang}) ...")
+        amodel, meta = _align_model(lang)
+        aligned = whisperx.align(kept, amodel, meta, audio, DEVICE, return_char_alignments=False)
+        for seg in aligned["segments"]:
+            for w in seg.get("words", []):
+                if w.get("start") is not None and w.get("end") is not None:
+                    words.append({"word": w["word"], "start": round(w["start"], 3),
+                                  "end": round(w["end"], 3)})
+    return words
+
+
+def serve():
+    """Warm server: load models once, then process one JSON request per stdin line.
+    Request:  {"audio":..,"model":..,"names":..,"nospeech":..,"minlogprob":..}
+    Response: a single stdout line  <RESULT><json words list>  (logs go to stderr)."""
+    print("wx serve: ready", file=sys.stderr, flush=True)
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            req = json.loads(line)
+            words = transcribe_words(req["audio"], req.get("model", "small.en"),
+                                     req.get("names", ""), float(req.get("nospeech", 0.6)),
+                                     float(req.get("minlogprob", -1.0)),
+                                     log=lambda m: print(m, file=sys.stderr, flush=True))
+            out = json.dumps(words)
+        except Exception as e:  # noqa: BLE001 — report, keep serving
+            out = json.dumps({"error": str(e)})
+            print(f"wx serve error: {e}", file=sys.stderr, flush=True)
+        sys.stdout.write(RESULT + out + "\n")
+        sys.stdout.flush()
+
+
 def main():
     as_json = "--json" in sys.argv
     args = [a for a in sys.argv[1:] if a != "--json"]
@@ -73,47 +158,7 @@ def main():
     def log(m):
         print(m, file=sys.stderr if as_json else sys.stdout, flush=True)
 
-    # Name-biasing: bias the decoder toward known names so they're transcribed correctly.
-    asr_options = {}
-    namelist = [n.strip() for n in names.split(",") if n.strip()]
-    if namelist:
-        asr_options["initial_prompt"] = "People in this conversation: " + ", ".join(namelist) + "."
-
-    log(f"loading whisperx {model_name} ...")
-    model = whisperx.load_model(model_name, DEVICE, compute_type="float16",
-                                asr_options=asr_options or None)
-    audio = whisperx.load_audio(audio_path)
-    log("transcribing ...")
-    result = model.transcribe(audio, batch_size=16)
-    lang = result.get("language", "en")
-
-    # Gate non-speech / low-confidence / boilerplate BEFORE alignment so the rest of
-    # the pipeline never sees phantom text. Missing keys → keep (fail-open).
-    kept, dropped = [], 0
-    for s in result.get("segments", []):
-        txt = (s.get("text") or "").strip()
-        nsp = s.get("no_speech_prob")
-        alp = s.get("avg_logprob")
-        if (not txt or _is_hallucination(txt)
-                or (nsp is not None and nsp > nospeech_max)
-                or (alp is not None and alp < min_logprob)):
-            dropped += 1
-            continue
-        kept.append(s)
-    log(f"kept {len(kept)} / {len(result.get('segments', []))} segments ({dropped} non-speech/low-conf dropped)")
-    result["segments"] = kept
-
-    words = []
-    if kept:
-        log(f"forced alignment (lang={lang}) ...")
-        amodel, meta = whisperx.load_align_model(language_code=lang, device=DEVICE)
-        aligned = whisperx.align(kept, amodel, meta, audio, DEVICE, return_char_alignments=False)
-        for seg in aligned["segments"]:
-            for w in seg.get("words", []):
-                if w.get("start") is not None and w.get("end") is not None:
-                    words.append({"word": w["word"], "start": round(w["start"], 3),
-                                  "end": round(w["end"], 3)})
-
+    words = transcribe_words(audio_path, model_name, names, nospeech_max, min_logprob, log)
     if as_json:
         print(json.dumps(words))
     else:
@@ -123,4 +168,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    serve() if "--serve" in sys.argv else main()

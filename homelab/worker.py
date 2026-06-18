@@ -85,12 +85,21 @@ def process_chunk(conn, chunk):
     _status("idle", f"done chunk #{cid} → transcript #{tid}", last_tid=tid)
 
 
+IDLE_UNLOAD_SECS = int(os.environ.get("LISTENER_MODEL_IDLE", "180"))  # free warm models after idle
+
+
 def loop():
     conn = db.connect()
     _status("idle", "started")
+    warm = False
+    last_active = time.time()
     while True:
         chunk = db.next_pending_chunk(conn, MAX_ATTEMPTS)
         if not chunk:
+            if warm and time.time() - last_active > IDLE_UNLOAD_SECS:
+                wordattribute.shutdown_servers()      # free VRAM for the desktop GPU (ADR-049)
+                warm = False
+                _status("idle", "models unloaded (idle)")
             time.sleep(POLL_SECS)
             continue
         clear, why = gpu_gate.status()
@@ -102,6 +111,8 @@ def loop():
             continue
         try:
             process_chunk(conn, chunk)
+            warm = True
+            last_active = time.time()
         except Exception as e:  # noqa: BLE001 — one bad chunk must not wedge the queue
             db.mark_chunk_error(conn, chunk["id"], e, MAX_ATTEMPTS)
             _status("idle", f"chunk #{chunk['id']} failed: {e}")

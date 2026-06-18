@@ -19,15 +19,30 @@ DIAR_PY = f"{HOME}/listener-diar/bin/python"  # pyannote diarize + ECAPA identif
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def run_json(python, script, *args):
-    proc = subprocess.run([python, os.path.join(HERE, script), *args, "--json"],
-                          capture_output=True, text=True, cwd=HERE)
+def _duration_s(path):
+    """Audio length in seconds (the normalized 16k wav), for scaling stage timeouts."""
+    try:
+        import wave
+        with wave.open(path, "rb") as w:
+            return w.getnframes() / float(w.getframerate() or 16000)
+    except Exception:  # noqa: BLE001 — unknown -> assume a full max-length segment
+        return 20.0
+
+
+def run_json(python, script, *args, timeout=None):
+    try:
+        proc = subprocess.run([python, os.path.join(HERE, script), *args, "--json"],
+                              capture_output=True, text=True, cwd=HERE, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        # RuntimeError (not SystemExit) so the worker catches it, marks the chunk
+        # failed, and moves on instead of one bad chunk wedging the whole queue.
+        raise RuntimeError(f"{script} timed out after {timeout}s (likely a degenerate chunk)")
     for line in reversed(proc.stdout.strip().splitlines()):
         line = line.strip()
         if line.startswith("[") or line.startswith("{"):
             return json.loads(line)
     sys.stderr.write(proc.stdout + proc.stderr)
-    raise SystemExit(f"no JSON from {script} (exit {proc.returncode})")
+    raise RuntimeError(f"no JSON from {script} (exit {proc.returncode})")
 
 
 def turn_of_word(w, turns):
@@ -56,10 +71,26 @@ def process_audio(audio, model="large-v3", chunk_id=None, verbose=False):
               "--minlogprob", str(db.cfg(_c, "asr_min_logprob", -1.0))]
     if _names:
         _extra = ["--names", _names] + _extra
-    words = run_json(WX_PY, "wx_align.py", audio, model, *_extra)
+    # Timeout scales with audio length so a long, genuinely multi-speaker conversation
+    # isn't killed, but a degenerate micro-turn explosion on a noise chunk is (ADR-048).
+    dur = _duration_s(audio)
+    words = run_json(WX_PY, "wx_align.py", audio, model, *_extra,
+                     timeout=int(90 + 12 * dur))
+    if not words:
+        # (b) Whisper heard nothing — skip the expensive diarize + ECAPA stages entirely
+        # (that's where noise chunks stall). Store an empty transcript so the chunk closes.
+        if verbose:
+            print("no speech — skipped diarization/ECAPA", file=sys.stderr, flush=True)
+        conn = db.connect()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO transcripts(chunk_id, audio_path, lang) VALUES (?, ?, 'en')",
+                    (chunk_id, audio))
+        tid = cur.lastrowid
+        conn.commit()
+        return tid
     if verbose:
         print("[2/2] diarize + identify       (cu13)  ...", file=sys.stderr, flush=True)
-    turns = run_json(DIAR_PY, "identify.py", audio)
+    turns = run_json(DIAR_PY, "identify.py", audio, timeout=int(60 + 10 * dur))
 
     # assign each word to a speaker, then group consecutive same-speaker words
     blocks = []

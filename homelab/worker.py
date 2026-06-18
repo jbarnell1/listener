@@ -60,6 +60,10 @@ def process_audio_file(audio, conn=None, chunk_id=None, marked=False):
     """Full pipeline for one normalized wav. Returns the transcript id."""
     conn = conn or db.connect()
     tid = wordattribute.process_audio(audio, MODEL, chunk_id=chunk_id)
+    has_text = conn.execute("SELECT 1 FROM segments WHERE transcript_id=? "
+                            "AND length(trim(text))>0 LIMIT 1", (tid,)).fetchone()
+    if not has_text:                              # no speech — skip LLM intents/tagging (ADR-048)
+        return tid
     intents.reconcile_for_transcript(conn, tid)   # close out items this convo resolved (ADR-032)
     intents.run_for_transcript(conn, tid, marked=marked)  # marked = deliberate capture (ADR-038)
     intents.update_recent_context(conn, tid)      # rolling context for the next chunk (ADR-038)

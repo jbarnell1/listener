@@ -5,6 +5,18 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-048 — Pipeline hardening: skip-on-silence + duration-scaled stage timeouts
+**2026-06-18.** Two cheap guards so a bad chunk can't wedge the (single-threaded) worker
+again (root-caused after the 2.7k overnight backlog + the ECAPA `torch.cat` hang on a
+noise chunk). **(a) Skip-on-silence:** if WhisperX returns no words, skip the expensive
+diarization + ECAPA stages and the LLM intent/tagging entirely — store an empty transcript
+and move on (most over-captured noise chunks cost ~nothing now). **(b) Duration-scaled
+timeouts:** each subprocess stage gets `timeout ≈ base + k·audio_seconds` (whisper 90+12·s,
+diarize 60+10·s) raised as a catchable `RuntimeError` (not `SystemExit`), so a genuine long
+multi-speaker conversation isn't killed but a degenerate micro-turn explosion is skipped
+after a bounded wait. Belt-and-suspenders on top of the real fix (dialed-in VAD); the
+pipeline now degrades gracefully on bad input regardless of capture tuning.
+
 ### ADR-047 — Firmware power management: WiFi radio duty-cycling (mic stays always-on)
 **2026-06-18.** The continuous build keeps WiFi **off** and only powers the radio for a
 short window — during silence — to drain the NAND ring + send telemetry, then turns it off

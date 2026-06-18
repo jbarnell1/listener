@@ -34,6 +34,7 @@ import gpu_gate
 import intents
 import mailer
 import purge
+import push
 import reflect
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -1249,6 +1250,42 @@ def queue_json():
     qs = db.queue_stats(c)
     w = _worker_status()
     return {"pending": qs["pending"], "state": w.get("state", ""), "detail": w.get("detail", "")}
+
+
+@app.get("/push/key")
+def push_key():
+    """The VAPID applicationServerKey the browser needs to subscribe (ADR-046)."""
+    try:
+        return {"key": push.public_key()}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"push not available: {e}")
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(request: Request):
+    """Store a browser PushSubscription so health alerts reach this phone."""
+    sub = await request.json()
+    keys = (sub or {}).get("keys") or {}
+    ep = (sub or {}).get("endpoint")
+    if not ep or "p256dh" not in keys or "auth" not in keys:
+        raise HTTPException(400, "bad subscription")
+    db.add_push_sub(db.connect(), ep, keys["p256dh"], keys["auth"],
+                    label=request.headers.get("user-agent", "")[:80])
+    return {"ok": True}
+
+
+@app.post("/push/unsubscribe")
+async def push_unsubscribe(request: Request):
+    body = await request.json()
+    if body.get("endpoint"):
+        db.remove_push_sub(db.connect(), body["endpoint"])
+    return {"ok": True}
+
+
+@app.post("/push/test")
+def push_test():
+    """Send a test notification to all subscribed devices."""
+    return {"delivered": push.broadcast("🔔 Listener", "Push notifications are working.")}
 
 
 @app.get("/healthz")

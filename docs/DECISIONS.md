@@ -21,10 +21,12 @@ ADR-018 (issue #10).
 me"), **≥90%** ("unplug me"), and **no telemetry for 30 min** ("turn on your hotspot"). Each
 fires **once per crossing** (state in `meta`, hysteresis 25/35 + 90/80; stale flag cleared
 when the device checks in) so there's no spam — `alerts.on_telemetry` on each `/telemetry`,
-plus a 10-min `check_stale` scheduler job. Delivery is **push-first, email-fallback**: a
-`push.broadcast()` hook (web push, not yet wired) is tried first, falling back to the existing
-SMTP mailer (ADR-024), so the preferred channel slots in without changing alert logic. Closes
-the device-side of the "turn on your hotspot" reminder from the roaming design.
+plus a 10-min `check_stale` scheduler job. Delivery is **push-first, email-fallback**:
+`push.broadcast()` (Web Push / VAPID via `pywebpush`, `push.py`) is tried first, falling back to
+the existing SMTP mailer (ADR-024). Subscriptions live in `push_subs`; the VAPID keypair is
+generated once into `~/.listener-push/`. The PWA (installed to the Android home screen) registers
+via Settings → "Enable phone notifications"; the service worker shows the alert and focuses the
+dashboard on tap. Closes the device-side of the "turn on your hotspot" reminder.
 
 ### ADR-045 — V1 on-device codec = IMA ADPCM (4:1); Opus deferred. Resolves Q-F2
 **2026-06-17.** The continuous-capture firmware encodes with **IMA ADPCM** (4-bit, 4:1

@@ -150,6 +150,39 @@
 </div>
 
 <div class="card">
+  <h2>📲 Phone notifications</h2>
+  <p class="muted" style="margin:0 0 10px">Get battery (low / charged) and "device went quiet"
+  alerts pushed to this phone. Falls back to email if you don't enable this.
+  <b>Android:</b> install Listener first (Chrome menu → <i>Add to Home screen</i>), open it from
+  the home-screen icon, then tap Enable.</p>
+  <button class="btn" id="pushBtn" onclick="enablePush()">🔔 Enable on this device</button>
+  <button class="btn" id="pushTest" onclick="testPush()" style="display:none">Send test</button>
+  <p class="muted" id="pushMsg" style="margin:.7em 0 0"></p>
+</div>
+<script>
+function u8(b){b=b.replace(/-/g,'+').replace(/_/g,'/');const r=atob(b+'='.repeat((4-b.length%4)%4));
+  return Uint8Array.from([...r].map(c=>c.charCodeAt(0)));}
+async function enablePush(){
+  const msg=document.getElementById('pushMsg');
+  try{
+    if(!('serviceWorker'in navigator)||!('PushManager'in window)){msg.textContent='This browser can’t do push. On Android use Chrome + Add to Home screen.';return;}
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){msg.textContent='Notifications were blocked. Allow them in the browser/site settings, then retry.';return;}
+    const reg=await navigator.serviceWorker.ready;
+    const key=await (await fetch('/push/key')).json();
+    const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(key.key)});
+    const r=await fetch('/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sub)});
+    if(r.ok){msg.textContent='✅ Enabled on this device.';document.getElementById('pushTest').style.display='';}
+    else msg.textContent='Subscribe failed ('+r.status+').';
+  }catch(e){msg.textContent='Couldn’t enable: '+e.message;}
+}
+async function testPush(){
+  const r=await (await fetch('/push/test',{method:'POST'})).json();
+  document.getElementById('pushMsg').textContent=r.delivered?'Test sent — check your notifications.':'No active subscriptions delivered.';
+}
+</script>
+
+<div class="card">
   <h2>Google Calendar &amp; Tasks</h2>
   {% if google_msg == 'ok' %}
     <div class="empty" style="color:var(--good);padding:6px 0">✓ Google reconnected — queued items synced.</div>

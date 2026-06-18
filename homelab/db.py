@@ -127,6 +127,13 @@ CREATE TABLE IF NOT EXISTS devices (              -- per-device HMAC keys + revo
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   revoked_at TEXT
 );
+CREATE TABLE IF NOT EXISTS push_subs (            -- web-push subscriptions (ADR-046)
+  endpoint   TEXT PRIMARY KEY,
+  p256dh     TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  label      TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 TABLES = ["speakers", "embeddings", "chunks", "transcripts",
@@ -496,6 +503,22 @@ def mark_intent_synced(conn, iid, calendar_event_id=None, calendar_link=None, gt
 
 
 # --- key/value meta + activity feed (ADR-028: "what's new since last check") ---
+
+def add_push_sub(conn, endpoint, p256dh, auth, label=None):
+    conn.execute("INSERT INTO push_subs(endpoint,p256dh,auth,label) VALUES(?,?,?,?) "
+                 "ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth",
+                 (endpoint, p256dh, auth, label))
+    conn.commit()
+
+
+def list_push_subs(conn):
+    return conn.execute("SELECT endpoint,p256dh,auth FROM push_subs").fetchall()
+
+
+def remove_push_sub(conn, endpoint):
+    conn.execute("DELETE FROM push_subs WHERE endpoint=?", (endpoint,))
+    conn.commit()
+
 
 def meta_get(conn, key, default=None):
     r = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()

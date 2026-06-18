@@ -5,7 +5,7 @@
    - Everything else (all HTML / dynamic GETs, every POST): NOT intercepted, so the
      browser goes straight to the network. If the homelab is down you get an honest
      connection error, never a fake cached dashboard. */
-const CACHE = 'listener-v2';
+const CACHE = 'listener-v3';
 const ASSETS = ['/static/htmx.min.js', '/static/icon.svg', '/manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
@@ -18,6 +18,24 @@ self.addEventListener('activate', (e) => {
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+// --- Web Push (ADR-046): show device-health alerts on the phone ---
+self.addEventListener('push', (e) => {
+  let d = { title: 'Listener', body: '', url: '/' };
+  try { d = Object.assign(d, e.data.json()); } catch (_) { if (e.data) d.body = e.data.text(); }
+  e.waitUntil(self.registration.showNotification(d.title, {
+    body: d.body, icon: '/static/icon.svg', badge: '/static/icon.svg',
+    data: { url: d.url }, tag: 'listener', renotify: true,
+  }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
+    for (const c of cs) { if ('focus' in c) return c.focus(); }
+    return clients.openWindow(url);
+  }));
 });
 
 self.addEventListener('fetch', (e) => {

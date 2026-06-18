@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import ClientDisconnect
 
+import alerts
 import assistant
 import backup
 import db
@@ -249,6 +250,8 @@ async def lifespan(_app):
                       id="profile_flush", replace_existing=True, misfire_grace_time=1800)
     scheduler.add_job(_run_reflection, CronTrigger(hour=23, minute=35),
                       id="reflection", replace_existing=True, misfire_grace_time=3600)
+    scheduler.add_job(alerts.check_stale, CronTrigger(minute="*/10"),
+                      id="device_stale", replace_existing=True, misfire_grace_time=600)
     scheduler.start()     # nightly brief + 3 AM purge + 3:30 AM DB backup (ADR-030)
     yield
     scheduler.shutdown(wait=False)
@@ -1230,7 +1233,12 @@ async def telemetry(request: Request, x_sig: str = Header(""), x_ts: str = Heade
         data = json.loads(body)
     except (ValueError, TypeError):
         raise HTTPException(400, "bad json")
-    db.upsert_device_status(db.connect(), data)
+    conn = db.connect()
+    db.upsert_device_status(conn, data)
+    try:
+        alerts.on_telemetry(conn, data)            # battery low/charged + clear stale flag (ADR-046)
+    except Exception as e:  # noqa: BLE001 — alerting must never fail an ingest
+        print(f"telemetry: alert check skipped: {e}")
     return {"ok": True}
 
 

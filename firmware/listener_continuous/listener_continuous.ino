@@ -37,7 +37,7 @@
 
 // ---- identity / endpoints ----
 const char* DEVICE_ID     = "listener-01";
-const char* FW_VERSION    = "v0.3-continuous";
+const char* FW_VERSION    = "v0.4-power";
 const char* INGEST_URL    = "https://jon-desktop.taildc59f0.ts.net:8443/ingest";
 const char* TELEMETRY_URL = "https://jon-desktop.taildc59f0.ts.net:8443/telemetry";
 
@@ -61,16 +61,23 @@ const char* TELEMETRY_URL = "https://jon-desktop.taildc59f0.ts.net:8443/telemetr
 #define USE_ADPCM        1              // 1 = IMA ADPCM 4:1 ; 0 = plain PCM16 (proven decode)
 const uint32_t SAMPLE_RATE   = 16000;
 const int      FRAME_SAMPLES = 320;     // 20 ms
-const int      PREROLL_MS    = 1500;    // lead-in kept before voice onset
-const int      VAD_HANG_MS   = 3000;    // bridge natural sentence pauses; pipeline stitches longer gaps (ADR-038)
+const int      PREROLL_MS    = 2000;    // lead-in kept before voice onset
+const int      VAD_HANG_MS   = 6000;    // bridge natural sentence pauses; pipeline stitches longer gaps (ADR-038)
 const int      MIN_SEG_MS    = 500;     // discard blips shorter than this
 const int      MAX_SEG_SEC   = 20;      // force-close long segments
 const int32_t  VAD_RMS_ON    = 900;     // frame RMS to start (raise if it triggers on hiss)
 const int32_t  VAD_RMS_OFF   = 700;     // frame RMS to keep alive (hysteresis)
-const int      VAD_ON_FRAMES = 3;       // consecutive 20ms frames above ON to start (rejects clicks)
+const int      VAD_ON_FRAMES = 9;       // consecutive 20ms frames above ON to start (rejects clicks)
 #define VAD_DEBUG        1              // 1 = LED_REC tracks segment-active + print peak rms ~1/s
 const uint32_t BATCH_EVERY_MS   = 240000;   // try to drain the ring every 4 min (testing)
-const uint32_t TELEMETRY_EVERY_MS = 120000; // 2 min
+const uint32_t TELEMETRY_EVERY_MS = 120000; // 2 min (each wake powers the radio; raise to save battery)
+
+// ---- power management (ADR-047) ----
+#define POWER_RADIO_DUTY 1     // 1 = WiFi OFF between bursts (big battery win); on only to upload/report
+#define POWER_CPU_SCALE  0     // 1 = drop CPU to 80MHz when idle, 240MHz online. OFF by default —
+                               // verify OPI-PSRAM/I2S stay clean on your board before enabling.
+const uint32_t CPU_IDLE_MHZ   = 80;
+const uint32_t CPU_ONLINE_MHZ = 240;
 
 const int   PREROLL_FRAMES = PREROLL_MS / 20;
 const int   HANG_FRAMES    = VAD_HANG_MS / 20;
@@ -308,13 +315,23 @@ int signedPost(const char* url,const uint8_t* body,size_t len,const char* ctype,
 }
 int batteryMv(){ uint32_t s=0; for (int i=0;i<16;i++){ s+=analogReadMilliVolts(BATT_ADC); delay(2);} return (int)((s/16.0f)*BATT_DIV); }
 
-// ---- drain the NAND ring to /ingest; called during silence so we don't cut a word ----
+// ---- radio duty-cycling: WiFi is OFF except during an upload/report window (ADR-047) ----
+bool wifiOn(){
+  if (WiFi.status()==WL_CONNECTED) return true;
+  WiFi.mode(WIFI_STA);
+  if (POWER_CPU_SCALE) setCpuFrequencyMhz(CPU_ONLINE_MHZ);   // TLS/handshake wants the headroom
+  bool ok = connectWiFi();
+  if (!ok && POWER_CPU_SCALE) setCpuFrequencyMhz(CPU_IDLE_MHZ);
+  return ok;
+}
+void wifiOff(){
+  if (POWER_RADIO_DUTY){ WiFi.disconnect(true,true); WiFi.mode(WIFI_OFF); }
+  if (POWER_CPU_SCALE) setCpuFrequencyMhz(CPU_IDLE_MHZ);
+}
+
+// ---- drain the NAND ring to /ingest; radio is already up (serviceNetwork owns on/off) ----
 void drainRing(){
-  if (pendCount == 0) return;
-  if (WiFi.status()!=WL_CONNECTED && !connectWiFi()){
-    Serial.println("drain: no network — staying buffered");
-    return;                                       // keep everything on NAND
-  }
+  if (pendCount == 0 || WiFi.status()!=WL_CONNECTED) return;
   lastNetSeenMs = millis();
   int uploaded=0;
   while (pendCount > 0){
@@ -345,11 +362,28 @@ void sendTelemetry(){
     DEVICE_ID, batteryMv(), online?(int)WiFi.RSSI():0, online?WiFi.SSID().c_str():"",
     (unsigned long)(millis()/1000), (unsigned)ESP.getFreeHeap(), FW_VERSION,
     pendCount, ringBufferedBytes(), offlineS, droppedSegs, muted?1:0);
-  if (!online && !connectWiFi()){ Serial.println("telemetry: offline"); lastTelemetry=millis(); return; }
+  if (!online){ lastTelemetry=millis(); return; }    // radio is owned by serviceNetwork()
   lastNetSeenMs=millis();
   int code=signedPost(TELEMETRY_URL,(uint8_t*)body,n,"application/json",false,false);
   Serial.printf("telemetry -> HTTP %d\n", code);
   lastTelemetry=millis();
+}
+
+// ---- one radio-on window: connect, drain the ring + report, radio back off ----
+void serviceNetwork(){
+  bool needDrain = pendCount>0 && (millis()-lastBatch>BATCH_EVERY_MS
+                                   || ringBufferedBytes() > 8u*1024*1024);
+  bool needTelem = millis()-lastTelemetry > TELEMETRY_EVERY_MS;
+  if (!needDrain && !needTelem) return;
+  if (!wifiOn()){                                    // no network — stay buffered, retry next interval
+    Serial.println("net: no network — buffered on NAND");
+    lastBatch=millis(); lastTelemetry=millis();      // back off so we don't hammer the radio
+    wifiOff();
+    return;
+  }
+  if (pendCount>0) drainRing();                       // drain everything while we're up
+  sendTelemetry();
+  wifiOff();
 }
 
 // ---- close the current segment: prepend pre-roll, encode, write to ring ----
@@ -417,9 +451,11 @@ void setup(){
     Serial.println("I2S begin FAILED");
   if (!nandInit()) Serial.println("WARNING: NAND down — segments cannot be stored");
   lastNetSeenMs=millis();
+  WiFi.mode(WIFI_STA);
   if (connectWiFi()){ configTime(0,0,"pool.ntp.org","time.nist.gov");
-    time_t now=0; uint32_t s=millis(); while ((now=time(nullptr))<1700000000 && millis()-s<15000) delay(300); }
-  sendTelemetry();
+    time_t now=0; uint32_t s=millis(); while ((now=time(nullptr))<1700000000 && millis()-s<15000) delay(300);
+    sendTelemetry(); }                              // announce on the dashboard while we're up
+  wifiOff();                                        // start low-power: radio off until the next window
   Serial.println(">>> continuous capture running. REC=mark now · MODE=mute <<<");
 }
 
@@ -466,11 +502,8 @@ void loop(){
     digitalWrite(LED_STAT,HIGH); delay(8); digitalWrite(LED_STAT,LOW);   // muted double-blink
   }
 
-  // batch drain + telemetry only during silence (don't cut a word)
-  if (!inSeg){
-    if (millis()-lastBatch > BATCH_EVERY_MS || ringBufferedBytes() > 8u*1024*1024) drainRing();
-    if (millis()-lastTelemetry > TELEMETRY_EVERY_MS) sendTelemetry();
-  }
+  // radio-on window (drain + telemetry) only during silence so we never cut a word
+  if (!inSeg) serviceNetwork();
   if (millis()-lastHeartbeat>3000 && !muted){ lastHeartbeat=millis();
     digitalWrite(LED_STAT,HIGH); delay(6); digitalWrite(LED_STAT,LOW); }
 }

@@ -524,10 +524,13 @@ def cfg_clear(conn, key):
 
 
 def activity_count(conn, since):
-    """How many new conversations + action items since `since` (for the nav badge)."""
-    return conn.execute(
-        "SELECT (SELECT COUNT(*) FROM transcripts WHERE created_at > ?) + "
-        "       (SELECT COUNT(*) FROM intents WHERE created_at > ?)", (since, since)).fetchone()[0]
+    """Bell badge: ALL new conversations collapse to ONE notification; each new action item
+    counts on its own. So 96 convos + 2 items = 3, not 98."""
+    row = conn.execute(
+        "SELECT (SELECT COUNT(*) FROM transcripts WHERE created_at > ?), "
+        "       (SELECT COUNT(*) FROM intents WHERE created_at > ?)", (since, since)).fetchone()
+    n_convos, n_items = row[0], row[1]
+    return (1 if n_convos else 0) + n_items
 
 
 def activity_since(conn, since):

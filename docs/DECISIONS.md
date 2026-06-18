@@ -5,6 +5,27 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-047 — Firmware power management: WiFi radio duty-cycling (mic stays always-on)
+**2026-06-18.** The continuous build keeps WiFi **off** and only powers the radio for a
+short window — during silence — to drain the NAND ring + send telemetry, then turns it off
+(`serviceNetwork()`/`wifiOff()`). Associated-WiFi was the dominant draw on an always-listening
+device. Rejected deep/light sleep for the main loop: the mic + I2S VAD must sample
+continuously, so the CPU/mic stay on; only the radio duty-cycles. CPU down-clocking
+(`POWER_CPU_SCALE`, 80 MHz idle) is provided but **default-off** pending OPI-PSRAM/I2S
+validation. Known tradeoff: capture pauses during the ~5–15 s upload window (single-core);
+a dual-core networking task is the future refinement. Implements the deferred power half of
+ADR-018 (issue #10).
+
+### ADR-046 — Device health alerts: battery + offline, push-first/email-fallback
+**2026-06-18.** The homelab proactively alerts on device health: **battery ≤25%** ("charge
+me"), **≥90%** ("unplug me"), and **no telemetry for 30 min** ("turn on your hotspot"). Each
+fires **once per crossing** (state in `meta`, hysteresis 25/35 + 90/80; stale flag cleared
+when the device checks in) so there's no spam — `alerts.on_telemetry` on each `/telemetry`,
+plus a 10-min `check_stale` scheduler job. Delivery is **push-first, email-fallback**: a
+`push.broadcast()` hook (web push, not yet wired) is tried first, falling back to the existing
+SMTP mailer (ADR-024), so the preferred channel slots in without changing alert logic. Closes
+the device-side of the "turn on your hotspot" reminder from the roaming design.
+
 ### ADR-045 — V1 on-device codec = IMA ADPCM (4:1); Opus deferred. Resolves Q-F2
 **2026-06-17.** The continuous-capture firmware encodes with **IMA ADPCM** (4-bit, 4:1
 compression, integer-only, ~no CPU/RAM cost, no external library) wrapped in a WAV

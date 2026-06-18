@@ -295,7 +295,8 @@ def get_speaker(conn, sid):
 def speaker_segments(conn, sid, limit=50):
     return conn.execute(
         "SELECT s.*, t.audio_path FROM segments s JOIN transcripts t ON t.id = s.transcript_id "
-        "WHERE s.speaker_id = ? ORDER BY s.id DESC LIMIT ?", (sid, limit)).fetchall()
+        "WHERE s.speaker_id = ? AND length(trim(s.text))>0 "
+        "ORDER BY s.id DESC LIMIT ?", (sid, limit)).fetchall()
 
 
 def get_segment(conn, seg_id):
@@ -305,10 +306,16 @@ def get_segment(conn, seg_id):
 
 
 def unknown_speakers(conn):
+    # Only surface voices that actually have something to review — at least one segment
+    # with transcribed text. Diarization sometimes carves a "turn" out of noise with no
+    # words; those aren't reviewable, so don't ask the user to name them.
     return conn.execute(
         "SELECT sp.id, COALESCE(sp.name, 'Unknown_' || sp.id) AS label, "
-        "(SELECT COUNT(*) FROM segments s WHERE s.speaker_id = sp.id) AS n_segments "
-        "FROM speakers sp WHERE sp.status = 'unknown' ORDER BY sp.id").fetchall()
+        "(SELECT COUNT(*) FROM segments s WHERE s.speaker_id = sp.id "
+        "  AND length(trim(s.text))>0) AS n_segments "
+        "FROM speakers sp WHERE sp.status = 'unknown' "
+        "AND EXISTS (SELECT 1 FROM segments s WHERE s.speaker_id = sp.id "
+        "            AND length(trim(s.text))>0) ORDER BY sp.id").fetchall()
 
 
 def enrolled_speakers(conn):

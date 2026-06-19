@@ -5,6 +5,15 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-052 — Google items carry the triggering snippet + a dashboard backlink
+**2026-06-18.** Google tasks/events now include, beyond the `via Listener · <who>` attribution,
+the **source quote** that triggered them and a **backlink** to the source conversation
+(`<dashboard>/transcripts/<id>`) so you get context where you act on it. The quote is behind a
+`google_include_quote` toggle (default on): only `owner==me` items reach Google, but a quote can
+still contain another person's words ("can you grab milk?"), so the toggle lets the user keep
+ADR-042's stricter posture if they want. The backlink is tailnet-only (no content leaves the box —
+just a URL). Dashboard base is `dashboard_url` meta (default the tailnet host).
+
 ### ADR-051 — Word-trimmed speaker embeddings (tight voiceprints + ID)
 **2026-06-18.** The ECAPA embedding that identifies a speaker AND becomes their stored
 voiceprint (running-mean centroid in `embeddings`) was computed over the **raw diarization

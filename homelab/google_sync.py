@@ -130,6 +130,27 @@ def web_finish(redirect_uri, code):
     _save(flow.credentials)
 
 
+DASHBOARD_DEFAULT = "https://jon-desktop.taildc59f0.ts.net"   # tailnet dashboard (link target)
+
+
+def _describe(conn, it):
+    """Body for the Google task/event: the triggering snippet (toggleable), the Listener
+    attribution, and a backlink to the source conversation on the dashboard (ADR-052)."""
+    lines = []
+    quote = (it["source_quote"] or "").strip()
+    # Only owner==me items reach Google, but the quote can still contain another person's
+    # words (e.g. "can you grab milk?"), so it's behind a toggle that relaxes ADR-042.
+    if quote and db.meta_get(conn, "google_include_quote", "1") != "0":
+        if len(quote) > 300:
+            quote = quote[:297] + "…"
+        lines.append(f'“{quote}”')
+    lines.append(f'— via Listener · {it["who"]}')
+    if it["transcript_id"]:
+        base = db.meta_get(conn, "dashboard_url", DASHBOARD_DEFAULT).rstrip("/")
+        lines.append(f'Open the conversation: {base}/transcripts/{it["transcript_id"]}')
+    return "\n".join(lines)
+
+
 def _svc(name, version, creds):
     from googleapiclient.discovery import build
     return build(name, version, credentials=creds, cache_discovery=False)
@@ -227,7 +248,7 @@ def sync_pending(conn, verbose=False):
             continue
         kind = (it["kind"] or "task").lower()
         rec = it["recurrence"]
-        desc = f'via Listener · {it["who"]}'
+        desc = _describe(conn, it)
         try:
             # A recurring item with a time is most useful as a recurring Calendar event,
             # even if the model called it a "task" (Google Tasks can't recur). ADR-038.

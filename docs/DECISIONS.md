@@ -5,6 +5,20 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-053 — On-device steady-noise rejection (RMS coefficient-of-variation)
+**2026-06-18.** The firmware now does an elementary speech check before keeping a segment:
+it tracks each in-segment frame's RMS and, at close, computes the **coefficient of variation**
+(std/mean). Steady noise (fan, road, hum) has near-constant energy → low CV; speech rises and
+falls with syllables → high CV. A segment is dropped (not written to NAND, not uploaded) only
+if `CV < CV_MIN` (default 0.22) — deliberately **biased to keep**: anything with modulation
+passes, and **marked (REC) captures bypass the check entirely**, so real speech is never
+dropped. Single spikes are already rejected by the onset debounce; this targets sustained
+noise. Cost is negligible (arithmetic on the RMS already computed for VAD — no FFT), so it's
+~free; the value is cleaner data (fewer junk uploads / NAND writes / homelab GPU), not battery
+(the radio is already minor with 30-min batching). Rejected word-count thresholds as a noise
+signal — they'd drop short, valuable utterances; confidence gates (ADR-038) + skip-on-silence
+(ADR-048) remain the server-side filter. Tunable via the `seg cv=` debug print.
+
 ### ADR-052 — Google items carry the triggering snippet + a dashboard backlink
 **2026-06-18.** Google tasks/events now include, beyond the `via Listener · <who>` attribution,
 the **source quote** that triggered them and a **backlink** to the source conversation

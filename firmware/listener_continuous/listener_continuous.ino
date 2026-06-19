@@ -37,7 +37,7 @@
 
 // ---- identity / endpoints ----
 const char* DEVICE_ID     = "listener-01";
-const char* FW_VERSION    = "v0.5-cadence";
+const char* FW_VERSION    = "v0.6-speechdetect";
 const char* INGEST_URL    = "https://jon-desktop.taildc59f0.ts.net:8443/ingest";
 const char* TELEMETRY_URL = "https://jon-desktop.taildc59f0.ts.net:8443/telemetry";
 
@@ -68,6 +68,12 @@ const int      MAX_SEG_SEC   = 30;      // force-close long segments (fewer, big
 const int32_t  VAD_RMS_ON    = 900;     // frame RMS to start (raise if it triggers on hiss)
 const int32_t  VAD_RMS_OFF   = 700;     // frame RMS to keep alive (hysteresis)
 const int      VAD_ON_FRAMES = 9;       // consecutive 20ms frames above ON to start (rejects clicks)
+// On-device speech check (ADR-053): steady noise (fan/road/hum) has near-constant energy;
+// speech rises and falls (syllables). Drop a segment only if its frame-RMS coefficient of
+// variation is BELOW CV_MIN (very flat) — biased to keep: anything with modulation passes.
+// Marked (REC) captures bypass this. Tune CV_MIN from the "seg cv=" debug print.
+#define SPEECH_DETECT    1              // 1 = drop steady-noise segments on-device
+const float    CV_MIN        = 0.22f;   // below this RMS coeff-of-variation = steady noise
 #define VAD_DEBUG        1              // 1 = LED_REC tracks segment-active + print peak rms ~1/s
 const uint32_t BATCH_EVERY_MS   = 1800000;  // drain ambient capture every 30 min (battery; marked uploads are immediate)
 const uint32_t TELEMETRY_EVERY_MS = 120000; // 2 min (each wake powers the radio; raise to save battery)
@@ -265,6 +271,10 @@ int      prerollHead = 0, prerollFill = 0;
 int16_t* pcmSeg = nullptr;              // current segment PCM
 int      segLen = 0;                    // samples in pcmSeg
 uint8_t* wavOut = nullptr;              // encoded WAV scratch
+// per-segment frame-RMS stats for the speech check (ADR-053)
+double   segRmsSum = 0, segRmsSum2 = 0; int segRmsN = 0;
+inline void segAccum(int32_t rms){ segRmsSum += rms; segRmsSum2 += (double)rms*rms; segRmsN++; }
+inline void segStatsReset(){ segRmsSum = segRmsSum2 = 0; segRmsN = 0; }
 const int PREROLL_CAP = PREROLL_FRAMES*FRAME_SAMPLES;
 const size_t WAVOUT_CAP = (size_t)(MAX_SEG_SAMPLES+PREROLL_CAP)*2 + 4096;
 
@@ -393,6 +403,17 @@ void serviceNetwork(){
 void closeSegment(bool marked){
   if (VAD_DEBUG) digitalWrite(LED_REC,LOW);              // segment over -> LED off
   if (segLen < MIN_SEG_FRAMES*FRAME_SAMPLES){ segLen=0; inSeg=false; hangCount=0; return; }
+  // On-device speech check (ADR-053): drop only clearly steady (low-modulation) noise.
+  if (SPEECH_DETECT && !marked && segRmsN > 4){
+    double mean = segRmsSum/segRmsN;
+    double var  = segRmsSum2/segRmsN - mean*mean;
+    double cv   = (mean > 1.0) ? sqrt(var > 0 ? var : 0)/mean : 0.0;
+    if (VAD_DEBUG) Serial.printf("seg cv=%.2f (drop<%.2f) frames=%d\n", cv, CV_MIN, segRmsN);
+    if (cv < CV_MIN){
+      Serial.println("dropped: steady noise (low modulation)");
+      segLen=0; inSeg=false; hangCount=0; return;        // not written to NAND / not uploaded
+    }
+  }
   uint32_t bytes = USE_ADPCM ? encodeAdpcmWav(pcmSeg, segLen, wavOut)
                              : encodePcmWav(pcmSeg, segLen, wavOut);
   // copy out of wavOut before ringWrite reuses it? ringWrite reads wavOut directly into NAND — fine,
@@ -490,13 +511,13 @@ void loop(){
     if (!inSeg) onsetRun = (rms>VAD_RMS_ON) ? onsetRun+1 : 0;
     bool start = forceMark || (!inSeg && onsetRun>=VAD_ON_FRAMES);
     if (start){
-      if (!inSeg){ inSeg=true; segLen=0; seedFromPreroll();
+      if (!inSeg){ inSeg=true; segLen=0; segStatsReset(); seedFromPreroll();
         if (VAD_DEBUG) digitalWrite(LED_REC,HIGH); }      // LED on once onset confirmed
-      onsetRun=0; appendSeg(f); hangCount=0;
+      onsetRun=0; appendSeg(f); segAccum(rms); hangCount=0;
     } else if (inSeg){
-      if (rms>VAD_RMS_OFF){ appendSeg(f); hangCount=0; } // still talking
+      if (rms>VAD_RMS_OFF){ appendSeg(f); segAccum(rms); hangCount=0; } // still talking
       else {                                            // ride out the hangover
-        appendSeg(f);
+        appendSeg(f); segAccum(rms);
         if (++hangCount >= HANG_FRAMES){ closeSegment(markedSeg); markedSeg=false; }
       }
     }

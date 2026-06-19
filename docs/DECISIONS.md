@@ -5,6 +5,17 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-051 — Word-trimmed speaker embeddings (tight voiceprints + ID)
+**2026-06-18.** The ECAPA embedding that identifies a speaker AND becomes their stored
+voiceprint (running-mean centroid in `embeddings`) was computed over the **raw diarization
+turn**, which carries silence before/after (and between) the actual speech — diluting both
+identification and training. Now `wordattribute` passes WhisperX word timings to the warm
+diarizer, which assigns each word to its diarized speaker and embeds only the **merged word
+spans** (tiny inter-word gaps bridged, ≤0.4 s) — speech only. A diarized turn with no
+transcribed words contributes no embedding (it's noise, not a person), which also reinforces
+the phantom-speaker filter. Raw-turn embedding remains a CLI fallback when no word timing is
+supplied.
+
 ### ADR-050 — Warm-aware GPU gate (fixes the warm-server deadlock)
 **2026-06-18.** ADR-049's warm models exposed a deadlock: warm Whisper/pyannote (~5–6 GB) +
 the resident Ollama LLM (~5–6 GB) fill the 12 GB card, so the gate's free-VRAM floor (3072 MB)

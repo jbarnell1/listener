@@ -164,7 +164,10 @@ def process_audio(audio, model="large-v3", chunk_id=None, verbose=False):
         return tid
     if verbose:
         print("[2/2] diarize + identify       (cu13)  ...", file=sys.stderr, flush=True)
-    turns = _server_request("diar", DIAR_PY, "identify.py", {"audio": audio},
+    # Pass the word timings so the diarizer trims each speaker's ECAPA embedding to the
+    # actual speech (not the silence-padded turn) — better ID + voiceprints (ADR-051).
+    turns = _server_request("diar", DIAR_PY, "identify.py",
+                            {"audio": audio, "words": words},
                             timeout=int(60 + 10 * dur))
 
     # assign each word to a speaker, then group consecutive same-speaker words

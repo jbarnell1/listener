@@ -224,8 +224,15 @@ const LS = {
       cmsgs.scrollTop=cmsgs.scrollHeight;
     };
     es.onerror = ()=>{ es.close(); this.busy=false; };
-  }
+  },
+  ask(text){ this.openChat(); cinput.value=text; setTimeout(()=>this.send(), 350); }
 };
+// Deep-link: ?ask=… opens the assistant pre-fed with context (e.g. from a Google item).
+(function(){
+  const p = new URLSearchParams(location.search).get('ask');
+  if(p){ history.replaceState(null,'',location.pathname);   // don't re-fire on refresh/back
+    window.addEventListener('load', ()=> setTimeout(()=>LS.ask(p), 450)); }
+})();
 // PWA: register the service worker for installability + offline app shell.
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));

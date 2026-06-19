@@ -146,8 +146,13 @@ def _describe(conn, it):
         lines.append(f'“{quote}”')
     lines.append(f'— via Listener · {it["who"]}')
     if it["transcript_id"]:
+        from urllib.parse import quote
         base = db.meta_get(conn, "dashboard_url", DASHBOARD_DEFAULT).rstrip("/")
-        lines.append(f'Open the conversation: {base}/transcripts/{it["transcript_id"]}')
+        tid = it["transcript_id"]
+        lines.append(f'🗒 Conversation: {base}/transcripts/{tid}')
+        ask = (f'Catch me up on transcript #{tid}: what was discussed, and why did it '
+               f'create "{it["action"]}"?')
+        lines.append(f'💬 Ask Listener: {base}/transcripts/{tid}?ask={quote(ask)}')
     return "\n".join(lines)
 
 

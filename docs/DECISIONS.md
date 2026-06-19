@@ -5,6 +5,20 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-050 — Warm-aware GPU gate (fixes the warm-server deadlock)
+**2026-06-18.** ADR-049's warm models exposed a deadlock: warm Whisper/pyannote (~5–6 GB) +
+the resident Ollama LLM (~5–6 GB) fill the 12 GB card, so the gate's free-VRAM floor (3072 MB)
+could **never** clear once warm — and the worker, looping in the *deferred* branch, never
+reached the idle-unload code, so the models stayed resident forever, blocking themselves.
+Fix: `gpu_gate.status(assume_loaded=True)` **skips the free-VRAM floor when our models are
+already resident** and gates only on utilization (the real "is a game rendering" signal —
+the floor only matters cold, as an OOM guard before loading). The worker passes
+`assume_loaded=warm`, and only **unloads after 3 consecutive deferred cycles** of sustained
+contention (`WARM_DEFERS_TO_UNLOAD`), retrying briefly (`WARM_RETRY_SECS=6`) on transient
+util blips — which are usually residual util from our *own* just-finished chunk — so it
+doesn't thrash model loads. Net: cold→load past a clear window, then drain the backlog warm,
+unloading only on real GPU contention or 180 s idle.
+
 ### ADR-049 — Warm model servers: load WhisperX/pyannote/ECAPA once, not per chunk
 **2026-06-18.** Root-cause fix for the queue backup: `wx_align.py` and `identify.py` were
 one-shot scripts that **reloaded ~3–6 GB of models on every chunk**, so per-chunk wall-clock

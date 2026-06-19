@@ -62,9 +62,14 @@ def _sample():
     raise RuntimeError("nvidia-smi not available")
 
 
-def status():
+def status(assume_loaded=False):
     """Return (clear: bool, detail: str). Fail-open (clear) if the GPU can't be
-    read, so a broken gate never permanently stalls the pipeline — but log it."""
+    read, so a broken gate never permanently stalls the pipeline — but log it.
+
+    `assume_loaded=True` means our pipeline models are ALREADY resident in VRAM, so the
+    free-VRAM floor is meaningless (our own models consume it) and would deadlock the gate
+    (ADR-050). In that case we gate ONLY on utilization — the real "is a game rendering"
+    signal — and skip the OOM floor (we're not allocating more)."""
     try:
         frees, utils = [], []
         for i in range(SAMPLES):
@@ -76,6 +81,9 @@ def status():
         return True, f"gate unavailable ({e}); proceeding"
     free_min, util_max = _limits()
     free, util = min(frees), max(utils)          # worst-case across the window
+    if assume_loaded:
+        clear = util <= util_max                 # models warm: free-VRAM is our own; ignore it
+        return clear, f"util={util}% (need ≤{util_max}%; warm — VRAM floor skipped)"
     clear = free >= free_min and util <= util_max
     detail = (f"free={free}MiB util={util}% "
               f"(need ≥{free_min}MiB & ≤{util_max}%)")

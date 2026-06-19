@@ -88,10 +88,15 @@ def process_chunk(conn, chunk):
 IDLE_UNLOAD_SECS = int(os.environ.get("LISTENER_MODEL_IDLE", "180"))  # free warm models after idle
 
 
+WARM_RETRY_SECS = 6          # brief GPU blip while warm — wait a moment, stay loaded
+WARM_DEFERS_TO_UNLOAD = 3    # only unload after this many consecutive defers (sustained contention)
+
+
 def loop():
     conn = db.connect()
     _status("idle", "started")
     warm = False
+    warm_defers = 0
     last_active = time.time()
     while True:
         chunk = db.next_pending_chunk(conn, MAX_ATTEMPTS)
@@ -102,8 +107,20 @@ def loop():
                 _status("idle", "models unloaded (idle)")
             time.sleep(POLL_SECS)
             continue
-        clear, why = gpu_gate.status()
+        clear, why = gpu_gate.status(assume_loaded=warm)
         if not clear:
+            if warm and warm_defers < WARM_DEFERS_TO_UNLOAD:
+                # brief blip (often residual util from our own last chunk) — stay warm,
+                # retry quickly so we don't thrash model loads (ADR-050).
+                warm_defers += 1
+                _status("deferred", f"GPU blip — {why}; staying warm",
+                        pending=db.queue_stats(conn)["pending"])
+                time.sleep(WARM_RETRY_SECS)
+                continue
+            if warm:                                  # sustained contention → free VRAM, back off
+                wordattribute.shutdown_servers()
+                warm = False
+            warm_defers = 0
             wait_txt = f"{DEFER_SECS//60} min" if DEFER_SECS >= 60 else f"{DEFER_SECS}s"
             _status("deferred", f"GPU busy — {why}; retry in {wait_txt}",
                     pending=db.queue_stats(conn)["pending"])
@@ -112,6 +129,7 @@ def loop():
         try:
             process_chunk(conn, chunk)
             warm = True
+            warm_defers = 0
             last_active = time.time()
         except Exception as e:  # noqa: BLE001 — one bad chunk must not wedge the queue
             db.mark_chunk_error(conn, chunk["id"], e, MAX_ATTEMPTS)

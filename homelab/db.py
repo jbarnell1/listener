@@ -292,6 +292,18 @@ def get_speaker(conn, sid):
         (sid,)).fetchone()
 
 
+def timeline_segments(conn, start_utc, end_utc):
+    """All transcribed segments in a UTC time window, in chronological order — for the
+    cross-conversation timeline view + export (ADR-054). created_at is the chunk's arrival."""
+    return conn.execute(
+        "SELECT t.id AS tid, t.created_at, s.t_start, s.t_end, s.id AS seg_id, "
+        "COALESCE(sp.name, 'Unknown_' || sp.id, '?') AS who, sp.status AS sp_status, s.text "
+        "FROM segments s JOIN transcripts t ON t.id = s.transcript_id "
+        "LEFT JOIN speakers sp ON sp.id = s.speaker_id "
+        "WHERE length(trim(s.text)) > 0 AND t.created_at >= ? AND t.created_at <= ? "
+        "ORDER BY t.created_at, s.t_start", (start_utc, end_utc)).fetchall()
+
+
 def speaker_segments(conn, sid, limit=50):
     return conn.execute(
         "SELECT s.*, t.audio_path FROM segments s JOIN transcripts t ON t.id = s.transcript_id "

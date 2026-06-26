@@ -43,16 +43,4 @@
   padding:0 6px 0 0;vertical-align:baseline}
 .snip:hover{filter:brightness(1.2)}
 </style>
-<script>
-// One shared player: click ▶ to play a snippet, ⏸ while playing, ⌀ if purged/unavailable.
-let _snipAudio = null, _snipBtn = null;
-function LSplay(btn, src){
-  if(_snipAudio && _snipBtn === btn && !_snipAudio.paused){ _snipAudio.pause(); btn.textContent='▶'; return; }
-  if(_snipAudio){ _snipAudio.pause(); if(_snipBtn) _snipBtn.textContent='▶'; }
-  _snipAudio = new Audio(src); _snipBtn = btn; btn.textContent='⏸';
-  _snipAudio.onended = ()=>{ btn.textContent='▶'; };
-  _snipAudio.onerror = ()=>{ btn.textContent='⌀'; btn.title='audio unavailable (purged after 30 days)'; };
-  _snipAudio.play().catch(()=>{ btn.textContent='⌀'; });
-}
-</script>
 {% endblock %}

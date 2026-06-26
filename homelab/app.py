@@ -904,6 +904,49 @@ def activity(request: Request):
     return page("activity.html", request, active="activity", new_count=0, since=since, **data)
 
 
+def _timeline_range(start, end):
+    """(start_dt_local, end_dt_local, start_utc_str, end_utc_str) from datetime-local inputs;
+    defaults to the last 12 hours."""
+    now = datetime.now(_CT)
+
+    def _p(s, default):
+        try:
+            return datetime.strptime(s, "%Y-%m-%dT%H:%M").replace(tzinfo=_CT)
+        except (ValueError, TypeError):
+            return default
+    end_dt = _p(end, now)
+    start_dt = _p(start, end_dt - timedelta(hours=12))
+    fmt = "%Y-%m-%d %H:%M:%S"
+    return (start_dt, end_dt,
+            start_dt.astimezone(_UTC).strftime(fmt), end_dt.astimezone(_UTC).strftime(fmt))
+
+
+@app.get("/timeline", response_class=HTMLResponse)
+def timeline(request: Request, start: str = "", end: str = ""):
+    c = db.connect()
+    sdt, edt, s_utc, e_utc = _timeline_range(start, end)
+    rows = db.timeline_segments(c, s_utc, e_utc)
+    return page("timeline.html", request, active="timeline", rows=rows,
+                start_val=sdt.strftime("%Y-%m-%dT%H:%M"), end_val=edt.strftime("%Y-%m-%dT%H:%M"),
+                count=len(rows))
+
+
+@app.get("/timeline.txt")
+def timeline_export(start: str = "", end: str = ""):
+    c = db.connect()
+    sdt, edt, s_utc, e_utc = _timeline_range(start, end)
+    rows = db.timeline_segments(c, s_utc, e_utc)
+    out, last = [f"Listener timeline · {sdt:%Y-%m-%d %H:%M} → {edt:%Y-%m-%d %H:%M} (local)\n"], None
+    for r in rows:
+        if r["tid"] != last:
+            out.append(f"\n--- Conversation #{r['tid']} · {_localtime(r['created_at'])} ---")
+            last = r["tid"]
+        out.append(f"{r['who']}: {r['text']}")
+    body = "\n".join(out) + "\n"
+    return Response(body, media_type="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=listener-timeline.txt"})
+
+
 ASSIST_SESSIONS = {}   # sid -> live conversation messages (ephemeral, in-memory)
 
 

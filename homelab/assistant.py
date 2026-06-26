@@ -20,7 +20,7 @@ MCP_URL = "http://127.0.0.1:8765/mcp"
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 MODEL = "qwen3:8b"   # reliable tool-calling. (qwen3:4b tested: loops + leaks
 # reasoning on multi-tool flows — revisit with a tool-tuned small model later.)
-MAX_STEPS = 6
+MAX_STEPS = 10
 SYSTEM = (
     "You are the assistant inside 'Listener', a private personal audio-journal "
     "dashboard. You help manage speakers, tasks, transcripts, and what's been learned "
@@ -97,6 +97,22 @@ async def run(messages):
                                 text = json.dumps({"error": str(e)})
                             yield _sse("tool_result", name=fn, result=text[:600])
                             messages.append({"role": "tool", "tool_name": fn, "content": text})
+                    else:
+                        # Loop exhausted while still calling tools — force ONE final answer
+                        # (no tools) so the user always gets a response (ADR-054).
+                        if tool_calls:
+                            final = messages + [{"role": "user", "content":
+                                "Stop calling tools. Answer my question now using what you've "
+                                "already gathered above."}]
+                            payload = {"model": MODEL, "messages": final, "stream": True,
+                                       "think": False, "options": {"temperature": 0}}
+                            async with http.stream("POST", OLLAMA_URL, json=payload) as r:
+                                async for line in r.aiter_lines():
+                                    if not line.strip():
+                                        continue
+                                    m = json.loads(line).get("message", {})
+                                    if m.get("content"):
+                                        yield _sse("token", text=m["content"])
         yield _sse("done")
     except Exception as e:  # noqa: BLE001
         yield _sse("error", message=str(e))

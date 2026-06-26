@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">Timeline</h1>
+<p class="sub">Every conversation in a time window, in order — even where topics split one
+talk across several transcripts. Pick a range, review, export.</p>
+
+<form method="get" action="/timeline" class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end">
+  <label style="flex:1;min-width:140px">From
+    <input type="datetime-local" name="start" value="{{ start_val }}"
+      style="width:100%;margin-top:4px">
+  </label>
+  <label style="flex:1;min-width:140px">To
+    <input type="datetime-local" name="end" value="{{ end_val }}"
+      style="width:100%;margin-top:4px">
+  </label>
+  <button class="btn">Show</button>
+  <a class="btn" style="background:#101a2e;color:var(--accent)"
+     href="/timeline.txt?start={{ start_val }}&end={{ end_val }}">⬇ Export .txt</a>
+</form>
+
+{% if not rows %}
+<div class="card"><div class="empty">No speech in this window. Widen the range.</div></div>
+{% else %}
+<p class="muted" style="margin:2px 0 10px">{{ count }} segments</p>
+{% set ns = namespace(tid=None) %}
+<div class="card">
+{% for r in rows %}
+  {% if r.tid != ns.tid %}
+    {% set ns.tid = r.tid %}
+    <a class="row" href="/transcripts/{{ r.tid }}" style="border-top:1px solid var(--border);margin-top:6px">
+      <div class="grow"><div class="muted" style="font-size:.8rem">🗒 Conversation #{{ r.tid }}
+        · {{ r.created_at|localtime }}</div></div>
+      <span class="chevron">›</span>
+    </a>
+  {% endif %}
+  <div class="row" style="--hue:{{ (r.who or '?')|hue if r.who else 0 }};border:none;padding:4px 0">
+    <div class="grow"><b style="color:var(--accent2)">{{ r.who }}{% if r.sp_status == 'unknown' %} ·?{% endif %}</b>
+      <span style="opacity:.5;font-size:.75rem">[{{ '%.0f'|format(r.t_start) }}s]</span><br>{{ r.text }}</div>
+    <button class="x" title="Play" onclick="LSplay(this,'/segment/{{ r.seg_id }}/audio.wav')">▶</button>
+  </div>
+{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

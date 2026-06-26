@@ -133,6 +133,8 @@ nav.bottom a.active{color:var(--accent)}
 .cm{max-width:86%;padding:10px 14px;border-radius:16px;font-size:.95rem;white-space:pre-wrap;word-wrap:break-word}
 .cm.user{align-self:flex-end;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0c10;font-weight:600;border-bottom-right-radius:5px}
 .cm.bot{align-self:flex-start;background:var(--card);border:1px solid var(--border);border-bottom-left-radius:5px}
+.cm.think{opacity:.6;font-style:italic;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:.75}}
 .tools{display:flex;flex-wrap:wrap;gap:6px;align-self:flex-start;max-width:86%}
 .toolchip{font-size:.72rem;font-weight:700;color:var(--accent);background:#101a2e;
   border:1px solid #28406e;border-radius:999px;padding:3px 10px}
@@ -148,7 +150,8 @@ nav.bottom a.active{color:var(--accent)}
 </head>
 <body>
 <header class="top"><div class="wrap"><span class="brand">🎧 Listener</span>
-  <a href="/search" class="bell" style="margin-left:auto" aria-label="Search">🔍</a>
+  <a href="/timeline" class="bell" style="margin-left:auto" aria-label="Timeline">🕑</a>
+  <a href="/search" class="bell" style="margin-left:16px" aria-label="Search">🔍</a>
   <a href="/activity" class="bell" style="margin-left:16px" aria-label="What's new">🔔{% if new_count %}<span class="badge">{{ new_count if new_count < 100 else '99+' }}</span>{% endif %}</a>
 </div></header>
 {% if device_alert %}
@@ -214,16 +217,19 @@ const LS = {
     cinput.value=''; this.busy=true;
     this.add('user', q);
     let tools=null, bot=null;
+    const think=this.add('bot think','💭 thinking…');   // working indicator until text streams
     const es = new EventSource('/assistant/stream?q='+encodeURIComponent(q)+'&sid='+this.sid);
     es.onmessage = (e)=>{ const d=JSON.parse(e.data);
-      if(d.type==='token'){ if(!bot) bot=this.add('bot',''); bot.textContent+=d.text; }
-      else if(d.type==='tool'){ if(!tools){tools=document.createElement('div');tools.className='tools';cmsgs.appendChild(tools);}
+      if(d.type==='token'){ if(think){think.remove();} if(!bot) bot=this.add('bot',''); bot.textContent+=d.text; }
+      else if(d.type==='tool'){ if(think){think.textContent='🔧 running '+d.name+'…';}
+        if(!tools){tools=document.createElement('div');tools.className='tools';cmsgs.appendChild(tools);}
         const c=document.createElement('span'); c.className='toolchip'; c.textContent='🔧 '+d.name; tools.appendChild(c); }
-      else if(d.type==='error'){ this.add('bot','⚠️ '+d.message); }
-      else if(d.type==='done'){ es.close(); this.busy=false; }
+      else if(d.type==='tool_result'){ if(think){think.textContent='💭 thinking…';} }
+      else if(d.type==='error'){ if(think){think.remove();} this.add('bot','⚠️ '+d.message); }
+      else if(d.type==='done'){ if(think){think.textContent='(no answer — try rephrasing)';} es.close(); this.busy=false; }
       cmsgs.scrollTop=cmsgs.scrollHeight;
     };
-    es.onerror = ()=>{ es.close(); this.busy=false; };
+    es.onerror = ()=>{ if(think && !bot){think.textContent='⚠️ connection lost';} es.close(); this.busy=false; };
   },
   ask(text){ this.openChat(); cinput.value=text; setTimeout(()=>this.send(), 350); }
 };
@@ -233,6 +239,16 @@ const LS = {
   if(p){ history.replaceState(null,'',location.pathname);   // don't re-fire on refresh/back
     window.addEventListener('load', ()=> setTimeout(()=>LS.ask(p), 450)); }
 })();
+// Shared snippet player (used on transcript + timeline): ▶ play, ⏸ playing, ⌀ if purged.
+let _snipAudio=null,_snipBtn=null;
+function LSplay(btn, src){
+  if(_snipAudio && _snipBtn===btn && !_snipAudio.paused){ _snipAudio.pause(); btn.textContent='▶'; return; }
+  if(_snipAudio){ _snipAudio.pause(); if(_snipBtn) _snipBtn.textContent='▶'; }
+  _snipAudio=new Audio(src); _snipBtn=btn; btn.textContent='⏸';
+  _snipAudio.onended=()=>{ btn.textContent='▶'; };
+  _snipAudio.onerror=()=>{ btn.textContent='⌀'; btn.title='audio unavailable (purged after 30 days)'; };
+  _snipAudio.play().catch(()=>{ btn.textContent='⌀'; });
+}
 // PWA: register the service worker for installability + offline app shell.
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));

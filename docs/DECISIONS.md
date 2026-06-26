@@ -5,6 +5,18 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-054 — Timeline review view + export, and assistant always-answers + thinking indicator
+**2026-06-26.** Two review/UX fixes. **(1) Timeline** (`/timeline`): a chronological,
+cross-conversation view (segments across all transcripts in a time window, since topics split
+one talk across several transcripts), with a start/end datetime filter, per-line playback, and
+a `.txt` export (`/timeline.txt`). Linked from the header (🕑). **(2) Assistant robustness:** the
+agent loop hit `MAX_STEPS` (6) while still calling tools and exited with **no final answer**
+(e.g. "summarize last night" = 1 list + 5 gets). Now `MAX_STEPS=10` and, if the cap is reached
+mid-tool-use, it makes one **forced no-tools call** so the user always gets a response; the chat
+shows a pulsing **"💭 thinking…"** indicator (updates to "🔧 running <tool>…") so it's clear it's
+working vs. stopped, with a "(no answer)" fallback. `LSplay` moved to `base.html` (shared by
+transcript + timeline).
+
 ### ADR-053 — On-device steady-noise rejection (RMS coefficient-of-variation)
 **2026-06-18.** The firmware now does an elementary speech check before keeping a segment:
 it tracks each in-segment frame's RMS and, at close, computes the **coefficient of variation**

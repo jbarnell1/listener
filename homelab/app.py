@@ -164,6 +164,12 @@ TUNABLES = [
          "min": 0.2, "max": 0.7, "step": 0.02, "unit": "",
          "help": "Lower, dedicated gate for recognizing YOU (the device owner) first — anchors "
                  "task ownership even on rough audio. Lower = catches your voice more eagerly."},
+        {"key": "diar_cluster_threshold", "label": "Diarization sensitivity", "default": 0.60,
+         "min": 0.30, "max": 0.90, "step": 0.02, "unit": "",
+         "help": "How readily diarization splits a chunk into separate speakers. LOWER = more "
+                 "sensitive (catches brief interjections, but may split one person into extra "
+                 "'unknowns'); higher = fewer speakers. Takes effect after the pipeline reloads "
+                 "(~3 min idle, or restart). New recordings only."},
     ]),
     ("Performance (gaming)", [
         {"key": "gpu_util_max", "label": "Pause above GPU load", "default": gpu_gate.UTIL_MAX_PCT,

@@ -23,8 +23,21 @@ RESULT = "\x02"          # sentinel prefix marking the JSON result line on stdou
 def _pipeline():
     global _PIPELINE
     if _PIPELINE is None:
-        _PIPELINE = Pipeline.from_pretrained("pyannote/speaker-diarization-community-1")
-        _PIPELINE.to(torch.device("cuda"))
+        p = Pipeline.from_pretrained("pyannote/speaker-diarization-community-1")
+        # Dashboard-tunable diarization sensitivity (ADR-055). Default 0.60 = the trained
+        # value (no change); lower splits brief interjections more readily. Re-instantiated
+        # at load, so a cfg change takes effect after the warm pipeline reloads.
+        try:
+            import db as _db
+            thr = float(_db.cfg(_db.connect(), "diar_cluster_threshold", 0.60))
+            if abs(thr - 0.60) > 1e-6:
+                p.instantiate({"segmentation": {"min_duration_off": 0.0},
+                               "clustering": {"threshold": thr, "Fa": 0.07, "Fb": 0.8}})
+                print(f"diar: clustering threshold tuned -> {thr}", file=sys.stderr, flush=True)
+        except Exception as e:  # noqa: BLE001 — tuning is optional, never block diarization
+            print(f"diar: sensitivity tuning skipped: {e}", file=sys.stderr, flush=True)
+        p.to(torch.device("cuda"))
+        _PIPELINE = p
     return _PIPELINE
 
 

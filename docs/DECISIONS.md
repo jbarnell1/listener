@@ -5,6 +5,18 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-055 — Dashboard-tunable diarization sensitivity (brief interjections)
+**2026-06-26.** Brief 1–2 s interjections were sometimes missed and their words attributed to
+the dominant speaker. This is NOT a one-speaker-per-chunk limit (pyannote detects multiple
+speakers within a chunk fine) — it's the diarizer being conservative on very short turns. The
+`SpeakerDiarization`/`VBxClustering` pipeline (pyannote 4.0.4, community-1) exposes
+`clustering.threshold` (trained default 0.60); LOWER splits a chunk into separate speakers more
+readily (catches interjections) at the risk of over-splitting one person into extra "unknowns".
+Exposed as a **dashboard knob** ("Diarization sensitivity", `diar_cluster_threshold`); `identify.py`
+re-instantiates the warm pipeline with it (safe default = 0.60, no change). Takes effect after the
+warm pipeline reloads (~3 min idle or restart). New recordings only — an experimental tradeoff to
+tune against real audio, not a one-size default change.
+
 ### ADR-054 — Timeline review view + export, and assistant always-answers + thinking indicator
 **2026-06-26.** Two review/UX fixes. **(1) Timeline** (`/timeline`): a chronological,
 cross-conversation view (segments across all transcripts in a time window, since topics split

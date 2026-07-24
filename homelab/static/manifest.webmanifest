@@ -1,8 +1,9 @@
 {
+  "id": "listener",
   "name": "Listener",
   "short_name": "Listener",
   "description": "Your day, captured and sorted — private and local.",
-  "start_url": "/",
+  "start_url": "/?pwa=listener",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0a0c10",

@@ -35,7 +35,7 @@
     </summary>
     <div style="margin-top:8px">
     {% for t in transcripts %}
-    <a class="row" href="/transcripts/{{ t.id }}">
+    <a class="row" href="{{ base }}/transcripts/{{ t.id }}">
       <div class="grow">
         <div class="name">{{ t.who or 'Transcript #' ~ t.id }}</div>
         <div class="muted">{{ t.n_segments }} segments · {{ t.created_at|localtime }}</div>
@@ -52,7 +52,7 @@
 <div class="card">
   <h2>New people ({{ speakers|length }})</h2>
   {% for s in speakers %}
-  <a class="row" href="/speakers/{{ s.id }}" style="--hue:{{ s.id|hue }}">
+  <a class="row" href="{{ base }}/speakers/{{ s.id }}" style="--hue:{{ s.id|hue }}">
     <div class="av">{{ s.label|initials }}</div>
     <div class="grow"><div class="name">{{ s.label }}</div>
       <div class="muted">first heard {{ s.created_at|localtime }}</div></div>

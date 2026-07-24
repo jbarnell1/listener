@@ -15,7 +15,7 @@
 
 <div class="card">
   <h2>Name</h2>
-  <form method="post" action="/speakers/{{ sp.id }}/name" class="field">
+  <form method="post" action="{{ base }}/speakers/{{ sp.id }}/name" class="field">
     <input name="name" placeholder="e.g. Sarah" value="{{ sp.name or '' }}">
     <button class="btn">Save</button>
   </form>
@@ -27,7 +27,7 @@
   {% set rels = ['Spouse/Partner','Mother','Father','Son','Daughter','Brother','Sister',
                  'Friend','In-law','Grandparent','Grandchild','Coworker','Boss','Neighbor',
                  'Acquaintance','Other'] %}
-  <form method="post" action="/speakers/{{ sp.id }}/relationship" class="field" style="margin:.1em 0 .6em">
+  <form method="post" action="{{ base }}/speakers/{{ sp.id }}/relationship" class="field" style="margin:.1em 0 .6em">
     <select name="relationship" onchange="this.form.submit()" aria-label="Relationship to you">
       <option value="">— relationship to you —</option>
       <option value="Myself" {{ 'selected' if sp.is_self }}>⭐ Myself</option>
@@ -77,7 +77,7 @@
   {% endif %}
   <details style="margin-top:.8em">
     <summary class="muted" style="cursor:pointer;font-weight:700">✏️ Edit profile</summary>
-    <form method="post" action="/speakers/{{ sp.id }}/profile"
+    <form method="post" action="{{ base }}/speakers/{{ sp.id }}/profile"
           style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
       <label>Summary
         <textarea name="summary" rows="2">{{ profile.summary if profile else '' }}</textarea></label>
@@ -97,12 +97,12 @@
     </form>
   </details>
   <div class="field" style="margin-top:.8em">
-    <form method="post" action="/speakers/{{ sp.id }}/profiling">
+    <form method="post" action="{{ base }}/speakers/{{ sp.id }}/profiling">
       {% if sp.do_not_profile %}<button class="btn ghost">Enable profiling</button>
       {% else %}<button class="btn ghost">Disable profiling</button>{% endif %}
     </form>
     {% if profile %}
-    <form method="post" action="/speakers/{{ sp.id }}/rebuild"
+    <form method="post" action="{{ base }}/speakers/{{ sp.id }}/rebuild"
           onsubmit="return confirm('Rebuild {{ sp.label }}\'s profile from scratch over all their conversations? Replaces the current one — use this if it has drifted.')">
       <button class="btn ghost">↻ Rebuild from conversations</button>
     </form>
@@ -124,7 +124,7 @@
         <div>{{ s.text }}</div>
         <div class="muted">[{{ '%.1f'|format(s.t_start) }}s]</div>
       </div>
-      <audio controls preload="none" src="/segment/{{ s.id }}/audio.wav"></audio>
+      <audio controls preload="none" src="{{ base }}/segment/{{ s.id }}/audio.wav"></audio>
     </div>
   {% else %}<div class="empty">No segments</div>{% endfor %}
 </div>
@@ -135,7 +135,7 @@
   everything tied to them — tasks, profile, voiceprint, and their lines in every transcript.
   Conversations left empty are removed; shared conversations keep the other speakers. This
   cannot be undone.</p>
-  <form method="post" action="/speakers/{{ sp.id }}/delete"
+  <form method="post" action="{{ base }}/speakers/{{ sp.id }}/delete"
     onsubmit="return confirm('Delete {{ sp.label }} and ALL of their data permanently? This cannot be undone.')">
     <button class="btn" style="background:linear-gradient(135deg,#ff6b6b,#d6336c);color:#fff">
       🗑 Delete everything</button>

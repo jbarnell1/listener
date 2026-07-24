@@ -8,13 +8,13 @@
   <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
     {% for tg in tags %}
       <span class="chip" style="display:inline-flex;align-items:center;gap:5px">
-        <a href="/topics/{{ tg.id }}" style="color:inherit">#{{ tg.name }}</a>
+        <a href="{{ base }}/topics/{{ tg.id }}" style="color:inherit">#{{ tg.name }}</a>
         <a href="#" onclick="document.getElementById('untag-{{ tg.id }}').submit();return false"
            style="color:var(--muted)">✕</a></span>
-      <form id="untag-{{ tg.id }}" method="post" action="/transcripts/{{ t.id }}/untag/{{ tg.id }}" style="display:none"></form>
+      <form id="untag-{{ tg.id }}" method="post" action="{{ base }}/transcripts/{{ t.id }}/untag/{{ tg.id }}" style="display:none"></form>
     {% else %}<span class="muted">No topics yet</span>{% endfor %}
   </div>
-  <form method="post" action="/transcripts/{{ t.id }}/tag" class="field" style="margin-top:10px">
+  <form method="post" action="{{ base }}/transcripts/{{ t.id }}/tag" class="field" style="margin-top:10px">
     <input name="name" list="alltags" placeholder="Add a topic…" autocomplete="off">
     <datalist id="alltags">{% for t2 in all_tags %}<option value="{{ t2.name }}">{% endfor %}</datalist>
     <button class="btn ghost">Add</button>
@@ -26,7 +26,7 @@
     <div class="msg" style="--hue:{{ b.sid|hue }}">
       <div class="av">{{ b.who|initials }}</div>
       <div class="bubble">
-        <div><a class="who" href="/speakers/{{ b.sid }}">{{ b.who }}</a></div>
+        <div><a class="who" href="{{ base }}/speakers/{{ b.sid }}">{{ b.who }}</a></div>
         {% for ln in b.lines %}
           <div class="line">
             {% if ln.id %}<button class="snip" title="Play this snippet"

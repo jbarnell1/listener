@@ -20,7 +20,13 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Form, Header, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import ClientDisconnect
@@ -270,6 +276,28 @@ app = FastAPI(title="Listener", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
 tpl = Jinja2Templates(directory=os.path.join(HERE, "templates"))
 
+# When set (e.g. "/listener"), the whole app is mounted under this path so it can share one
+# origin with another PWA (Android app-links are port-blind; see the Studio project). Every
+# template URL is prefixed with `base` (= the mount root_path); redirects are prefixed here.
+BASE_PATH = os.environ.get("LISTENER_BASE_PATH", "").rstrip("/")
+
+
+@app.middleware("http")
+async def _prefix_redirects(request: Request, call_next):
+    response = await call_next(request)
+    base = request.scope.get("root_path", "")
+    if base and 300 <= response.status_code < 400:
+        loc = response.headers.get("location")
+        if (
+            loc
+            and loc.startswith("/")
+            and not loc.startswith("//")
+            and not loc.startswith(base + "/")
+            and loc != base
+        ):
+            response.headers["location"] = base + loc
+    return response
+
 
 def _initials(label):
     if not label or str(label).lower().startswith("unknown"):
@@ -321,6 +349,7 @@ def page(name, request, **ctx):
         for k, v in (("new_count", 0), ("review_count", 0), ("unknown_count", 0),
                      ("device_alert", None), ("consent_ok", True), ("calibrating", False)):
             ctx.setdefault(k, v)
+    ctx.setdefault("base", request.scope.get("root_path", ""))  # in-app URL prefix
     return tpl.TemplateResponse(request, name, ctx)
 
 
@@ -1345,13 +1374,46 @@ def healthz():
 # ---- PWA: manifest + service worker (ADR-036). SW served from root so its scope
 # is the whole app; manifest gets the correct content-type for installability. ----
 @app.get("/manifest.webmanifest")
-def manifest():
-    return FileResponse(os.path.join(HERE, "static", "manifest.webmanifest"),
-                        media_type="application/manifest+json")
+def manifest(request: Request):
+    # Dynamic so scope/start_url/icons carry the mount prefix (distinct id + prefixed scope
+    # are what let this install as its own PWA alongside another app on the same origin).
+    base = request.scope.get("root_path", "")
+    return JSONResponse(
+        {
+            "id": "listener",
+            "name": "Listener",
+            "short_name": "Listener",
+            "description": "Your day, captured and sorted — private and local.",
+            "start_url": f"{base}/?pwa=listener",
+            "scope": f"{base}/",
+            "display": "standalone",
+            "background_color": "#0a0c10",
+            "theme_color": "#0a0c10",
+            "orientation": "portrait-primary",
+            "categories": ["productivity", "utilities"],
+            "icons": [
+                {"src": f"{base}/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
+                {"src": f"{base}/static/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable"},
+            ],
+        },
+        media_type="application/manifest+json",
+    )
 
 
 @app.get("/sw.js")
-def service_worker():
+def service_worker(request: Request):
+    base = request.scope.get("root_path", "")
+    scope = (base or "") + "/"
     return FileResponse(os.path.join(HERE, "static", "sw.js"),
                         media_type="application/javascript",
-                        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"})
+                        headers={"Service-Worker-Allowed": scope, "Cache-Control": "no-cache"})
+
+
+# Mount under a base path (e.g. "/listener") to share one origin with another PWA; served as
+# `app` when standalone. `root` carries the same lifespan so the workers still start. uvicorn
+# serves `app:root` (works both mounted and at root).
+if BASE_PATH:
+    root = FastAPI(lifespan=lifespan)
+    root.mount(BASE_PATH, app)
+else:
+    root = app

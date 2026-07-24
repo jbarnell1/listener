@@ -9,21 +9,21 @@
     <div class="av">📅</div>
     <div class="grow">
       <div class="name">Looks {{ i.close_kind or 'done' }} — remove “{{ i.action }}”?</div>
-      <div class="muted"><a href="/speakers/{{ i.speaker_id }}">{{ i.who }}</a>{% if i.due_at %} · {{ i.due_at|localtime }}{% endif %}</div>
+      <div class="muted"><a href="{{ base }}/speakers/{{ i.speaker_id }}">{{ i.who }}</a>{% if i.due_at %} · {{ i.due_at|localtime }}{% endif %}</div>
       {% if i.close_note %}<div class="quote">heard: "{{ i.close_note }}"</div>{% endif %}
     </div>
     <button class="btn" title="Remove from Calendar"
-            hx-post="/tasks/{{ i.id }}/confirm-close" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">Remove</button>
+            hx-post="{{ base }}/tasks/{{ i.id }}/confirm-close" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">Remove</button>
     <button class="btn ghost" title="Keep it"
-            hx-post="/tasks/{{ i.id }}/keep" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">Keep</button>
+            hx-post="{{ base }}/tasks/{{ i.id }}/keep" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">Keep</button>
   </div>
   {% endfor %}
 
   {% if suggested|length > 1 %}
   <div class="row" style="gap:8px">
     <div class="grow muted" style="font-size:.8rem">{{ suggested|length }} suggestions to review</div>
-    <form method="post" action="/tasks/review/approve-all"><button class="btn" style="padding:7px 12px">Add all</button></form>
-    <form method="post" action="/tasks/review/dismiss-all"><button class="btn ghost" style="padding:7px 12px">Dismiss all</button></form>
+    <form method="post" action="{{ base }}/tasks/review/approve-all"><button class="btn" style="padding:7px 12px">Add all</button></form>
+    <form method="post" action="{{ base }}/tasks/review/dismiss-all"><button class="btn ghost" style="padding:7px 12px">Dismiss all</button></form>
   </div>
   {% endif %}
   {% for i in suggested %}
@@ -31,14 +31,14 @@
     <div class="av">{{ i.who|initials }}</div>
     <div class="grow">
       <div class="name">{% if i.importance and i.importance >= 4 %}⭐ {% endif %}{{ i.action }}</div>
-      <div class="muted"><a href="/speakers/{{ i.speaker_id }}">{{ i.who }}</a>{% if i.due_at %} · {{ i.due_at|localtime }}{% endif %}
+      <div class="muted"><a href="{{ base }}/speakers/{{ i.speaker_id }}">{{ i.who }}</a>{% if i.due_at %} · {{ i.due_at|localtime }}{% endif %}
         · <span class="chip">unsure{% if i.confidence %} · {{ (i.confidence * 100)|int }}%{% endif %}</span></div>
       {% if i.source_quote %}<div class="quote">"{{ i.source_quote }}"</div>{% endif %}
     </div>
     <button class="btn" title="Add to {{ 'Calendar' if i.kind == 'event' else 'Tasks' }}"
-            hx-post="/tasks/{{ i.id }}/approve" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">Add</button>
+            hx-post="{{ base }}/tasks/{{ i.id }}/approve" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">Add</button>
     <button class="x" title="Not a task — dismiss"
-            hx-post="/tasks/{{ i.id }}/dismiss" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">✕</button>
+            hx-post="{{ base }}/tasks/{{ i.id }}/dismiss" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">✕</button>
   </div>
   {% endfor %}
 
@@ -50,7 +50,7 @@
       <div class="muted">auto-{{ i.close_kind or 'completed' }}{% if i.close_note %} · heard: "{{ i.close_note }}"{% endif %}</div>
     </div>
     <button class="btn ghost" title="Reopen this item"
-            hx-post="/tasks/{{ i.id }}/undo" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">Undo</button>
+            hx-post="{{ base }}/tasks/{{ i.id }}/undo" hx-target="#rev-{{ i.id }}" hx-swap="outerHTML">Undo</button>
   </div>
   {% endfor %}
 </div>

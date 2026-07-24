@@ -4,7 +4,7 @@
 <p class="sub">Every conversation in a time window, in order — even where topics split one
 talk across several transcripts. Pick a range, review, export.</p>
 
-<form method="get" action="/timeline" class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end">
+<form method="get" action="{{ base }}/timeline" class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end">
   <label style="flex:1;min-width:140px">From
     <input type="datetime-local" name="start" value="{{ start_val }}"
       style="width:100%;margin-top:4px">
@@ -15,7 +15,7 @@ talk across several transcripts. Pick a range, review, export.</p>
   </label>
   <button class="btn">Show</button>
   <a class="btn" style="background:#101a2e;color:var(--accent)"
-     href="/timeline.txt?start={{ start_val }}&end={{ end_val }}">⬇ Export .txt</a>
+     href="{{ base }}/timeline.txt?start={{ start_val }}&end={{ end_val }}">⬇ Export .txt</a>
 </form>
 
 {% if not rows %}
@@ -27,7 +27,7 @@ talk across several transcripts. Pick a range, review, export.</p>
 {% for r in rows %}
   {% if r.tid != ns.tid %}
     {% set ns.tid = r.tid %}
-    <a class="row" href="/transcripts/{{ r.tid }}" style="border-top:1px solid var(--border);margin-top:6px">
+    <a class="row" href="{{ base }}/transcripts/{{ r.tid }}" style="border-top:1px solid var(--border);margin-top:6px">
       <div class="grow"><div class="muted" style="font-size:.8rem">🗒 Conversation #{{ r.tid }}
         · {{ r.created_at|localtime }}</div></div>
       <span class="chevron">›</span>

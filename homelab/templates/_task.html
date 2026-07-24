@@ -3,7 +3,7 @@
   <div class="grow">
     <div class="name">{{ i.action }}</div>
     <div class="muted">
-      <a href="/speakers/{{ i.speaker_id }}">{{ i.who }}</a>
+      <a href="{{ base }}/speakers/{{ i.speaker_id }}">{{ i.who }}</a>
       {% if i.owner and i.owner|lower not in ['me', 'myself'] %} · <b>for {{ i.owner }}</b>{% endif %}
       {% if i.due_at %} · <span class="due">{{ i.due_at|localtime }}</span>{% endif %}
       {% if i.recurrence %} · <span class="chip" style="font-size:.6rem;padding:1px 7px">🔁 {{ i.recurrence }}</span>{% endif %}
@@ -14,12 +14,12 @@
       {% if i.calendar_event_id %}<a class="chip good" href="{{ i.calendar_link }}" target="_blank" rel="noopener">📅 On Calendar ↗</a>
       {% elif i.gtask_id %}<span class="chip good">✅ Google Task</span>
       {% elif i.kind == 'followup' %}<span class="chip">✉️ In digest</span>{% endif %}
-      {% if i.transcript_id %}<a class="chip" href="/transcripts/{{ i.transcript_id }}">💬 from conversation</a>{% endif %}
+      {% if i.transcript_id %}<a class="chip" href="{{ base }}/transcripts/{{ i.transcript_id }}">💬 from conversation</a>{% endif %}
       {% if i.confidence and (i.calendar_event_id or i.gtask_id) %}<span class="chip" title="Auto-added — how sure the AI was">🤖 {{ (i.confidence * 100)|int }}%</span>{% endif %}
     </div>{% endif %}
   </div>
   <span class="tier {{ 'soon' if i.tier == 'SOON' else 'later' }}">{{ i.tier }}</span>
   <button class="x" title="Dismiss (also removes from Calendar/Tasks)"
-          hx-post="/tasks/{{ i.id }}/dismiss"
+          hx-post="{{ base }}/tasks/{{ i.id }}/dismiss"
           hx-target="#task-{{ i.id }}" hx-swap="outerHTML">✕</button>
 </div>

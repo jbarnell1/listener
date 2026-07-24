@@ -41,12 +41,12 @@
     <div class="row">
       <div class="grow"><div class="name">{{ d.device_id }}{% if d.label %} <span class="muted">· {{ d.label }}</span>{% endif %}</div>
         <div class="muted">{% if d.active %}<span style="color:var(--good)">active</span>{% else %}revoked{% endif %} · issued {{ d.created_at }}</div></div>
-      <form method="post" action="/settings/devices/{{ d.device_id }}/toggle">
+      <form method="post" action="{{ base }}/settings/devices/{{ d.device_id }}/toggle">
         <button class="btn ghost" style="padding:7px 12px">{{ 'Revoke' if d.active else 'Re-enable' }}</button>
       </form>
     </div>
   {% endfor %}
-  <form class="field" method="post" action="/settings/devices/new" style="margin-top:10px">
+  <form class="field" method="post" action="{{ base }}/settings/devices/new" style="margin-top:10px">
     <input name="device_id" placeholder="device id (e.g. listener-01)" required>
     <input name="label" placeholder="label (optional)">
     <button class="btn">Issue key</button>
@@ -66,9 +66,9 @@
     </div>
   </div>
   <div class="field" style="margin-top:12px">
-    <form method="post" action="/settings/mcp/restart"><button class="btn">Restart</button></form>
-    <form method="post" action="/settings/mcp/start"><button class="btn ghost">Start</button></form>
-    <form method="post" action="/settings/mcp/stop"><button class="btn ghost">Stop</button></form>
+    <form method="post" action="{{ base }}/settings/mcp/restart"><button class="btn">Restart</button></form>
+    <form method="post" action="{{ base }}/settings/mcp/start"><button class="btn ghost">Start</button></form>
+    <form method="post" action="{{ base }}/settings/mcp/stop"><button class="btn ghost">Stop</button></form>
   </div>
   <p class="muted" style="margin:.8em 0 0">If the assistant stops responding (e.g. after a
   WSL hiccup while you're away), Restart here brings the tool server back.</p>
@@ -94,11 +94,11 @@
     <span class="chip {{ 'good' if gpu_clear else 'unk' }}">GPU {{ 'clear' if gpu_clear else 'busy' }} · {{ gpu_detail }}</span>
   </div>
   <div class="field">
-    <form method="post" action="/settings/worker/restart"><button class="btn">Restart</button></form>
-    <form method="post" action="/settings/worker/start"><button class="btn ghost">Start</button></form>
-    <form method="post" action="/settings/worker/stop"><button class="btn ghost">Stop</button></form>
+    <form method="post" action="{{ base }}/settings/worker/restart"><button class="btn">Restart</button></form>
+    <form method="post" action="{{ base }}/settings/worker/start"><button class="btn ghost">Start</button></form>
+    <form method="post" action="{{ base }}/settings/worker/stop"><button class="btn ghost">Stop</button></form>
   </div>
-  <form class="field" method="post" action="/settings/llm-model" style="margin-top:10px">
+  <form class="field" method="post" action="{{ base }}/settings/llm-model" style="margin-top:10px">
     <label class="muted" style="align-self:center;white-space:nowrap">Pipeline LLM</label>
     <input name="model" value="{{ llm_model }}" placeholder="qwen3:8b">
     <button class="btn ghost">Save model</button>
@@ -135,8 +135,8 @@
   </div>
   {% if mail_configured %}
   <div class="field" style="margin-top:12px;flex-wrap:wrap;gap:8px">
-    <form method="post" action="/settings/mail/test"><button class="btn">Send test email</button></form>
-    <form method="post" action="/settings/brief-time" style="display:flex;align-items:center;gap:8px">
+    <form method="post" action="{{ base }}/settings/mail/test"><button class="btn">Send test email</button></form>
+    <form method="post" action="{{ base }}/settings/brief-time" style="display:flex;align-items:center;gap:8px">
       <label class="muted" for="brief-time">Send at</label>
       <input type="time" id="brief-time" name="t" value="{{ brief_time_val }}" required
              style="width:auto">
@@ -169,15 +169,15 @@ async function enablePush(){
     const perm=await Notification.requestPermission();
     if(perm!=='granted'){msg.textContent='Notifications were blocked. Allow them in the browser/site settings, then retry.';return;}
     const reg=await navigator.serviceWorker.ready;
-    const key=await (await fetch('/push/key')).json();
+    const key=await (await fetch('{{ base }}/push/key')).json();
     const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(key.key)});
-    const r=await fetch('/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sub)});
+    const r=await fetch('{{ base }}/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sub)});
     if(r.ok){msg.textContent='✅ Enabled on this device.';document.getElementById('pushTest').style.display='';}
     else msg.textContent='Subscribe failed ('+r.status+').';
   }catch(e){msg.textContent='Couldn’t enable: '+e.message;}
 }
 async function testPush(){
-  const r=await (await fetch('/push/test',{method:'POST'})).json();
+  const r=await (await fetch('{{ base }}/push/test',{method:'POST'})).json();
   document.getElementById('pushMsg').textContent=r.delivered?'Test sent — check your notifications.':'No active subscriptions delivered.';
 }
 </script>
@@ -202,7 +202,7 @@ async function testPush(){
     </div>
   </div>
   <div class="field" style="margin-top:12px">
-    <a class="btn" href="/google/start">🔗 {{ 'Reconnect' if google.connected else 'Connect' }} Google (here, no CLI)</a>
+    <a class="btn" href="{{ base }}/google/start">🔗 {{ 'Reconnect' if google.connected else 'Connect' }} Google (here, no CLI)</a>
   </div>
   <details style="margin-top:.6em">
     <summary class="muted" style="cursor:pointer">one-time setup for the in-browser flow</summary>
@@ -214,7 +214,7 @@ async function testPush(){
   </details>
   {% if google.connected %}
   <div class="field" style="margin-top:12px">
-    <form method="post" action="/settings/google/toggle">
+    <form method="post" action="{{ base }}/settings/google/toggle">
       <button class="btn {{ 'ghost' if not google_paused else '' }}">
         {{ 'Resume Google sync' if google_paused else 'Pause Google sync' }}</button>
     </form>
@@ -242,7 +242,7 @@ async function testPush(){
   <p class="muted" style="margin:0 0 10px">Durable facts about you that ground <b>every</b>
   extraction — work schedule, household, preferences, how you refer to places/people. The
   model sees this on every conversation, so keep it short and stable.</p>
-  <form method="post" action="/settings/core-memory">
+  <form method="post" action="{{ base }}/settings/core-memory">
     <textarea name="core" rows="5" placeholder="- I work from home Tuesdays and Thursdays&#10;- My wife is Moriah; our dog is Biscuit&#10;- I prefer texts over phone calls&#10;- 'the office' = my downtown coworking space">{{ core_memory }}</textarea>
     <div class="field" style="margin-top:10px"><button class="btn">Save</button></div>
   </form>
@@ -254,12 +254,12 @@ async function testPush(){
   <p class="muted" style="margin:0 0 10px"><b>Active</b> — auto-add bar raised, Google sync
   paused. Review locally; the dashboard shows your graduation checklist. Go live when it's
   trustworthy.</p>
-  <form method="post" action="/settings/calibration/golive"><button class="btn">🚀 Go live now</button></form>
+  <form method="post" action="{{ base }}/settings/calibration/golive"><button class="btn">🚀 Go live now</button></form>
   {% else %}
   <p class="muted" style="margin:0 0 10px">For week one / new hardware: raises the auto-add
   confidence bar and pauses Google sync so you tune against real audio without flooding your
   calendar. See the <a href="https://github.com/jbarnell1/listener/blob/main/docs/FIELD-TUNING.md" target="_blank" rel="noopener">field-tuning playbook ↗</a>.</p>
-  <form method="post" action="/settings/calibration/enter"><button class="btn ghost">Enter calibration mode</button></form>
+  <form method="post" action="{{ base }}/settings/calibration/enter"><button class="btn ghost">Enter calibration mode</button></form>
   {% endif %}
 </div>
 
@@ -269,7 +269,7 @@ async function testPush(){
     <span class="muted" style="font-size:.8rem">· advanced — tap to expand</span></summary>
   <p class="muted" style="margin:10px 0 4px">Live knobs — changes apply immediately, no restart.
   Leave at default unless something feels off; each shows its built-in default.</p>
-  <form method="post" action="/settings/tuning">
+  <form method="post" action="{{ base }}/settings/tuning">
     {% for group, knobs in tuning %}
     <div class="sec" style="font-size:.9rem;margin:14px 2px 2px">{{ group }}</div>
     {% for k in knobs %}
@@ -294,7 +294,7 @@ async function testPush(){
     {% endfor %}
     <div class="field" style="margin-top:14px">
       <button class="btn">Save tuning</button>
-      <button class="btn ghost" formaction="/settings/tuning/reset">Reset all to defaults</button>
+      <button class="btn ghost" formaction="{{ base }}/settings/tuning/reset">Reset all to defaults</button>
     </div>
   </form>
 </details>
@@ -308,7 +308,7 @@ async function testPush(){
   (3 AM daily); transcripts and profiles are kept. Snippet playback becomes text-only once
   audio is purged.</p>
   <p class="muted" style="margin:.6em 0 0">Naming voices follows the
-  <a href="/consent">Usage &amp; Consent Policy</a> —
+  <a href="{{ base }}/consent">Usage &amp; Consent Policy</a> —
   {% if consent_ok %}<span style="color:var(--good)">accepted ✓</span>{% else %}not yet accepted{% endif %}.</p>
 </div>
 {% endblock %}

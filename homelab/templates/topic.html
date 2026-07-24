@@ -10,7 +10,7 @@
 </div>
 {% endif %}
 
-<form method="get" action="/export">
+<form method="get" action="{{ base }}/export">
 <div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between">
     <h2 style="margin:0">Snippets</h2>
@@ -20,7 +20,7 @@
   {% for s in snippets %}
     <div class="row" style="--hue:{{ s.id|hue }}">
       <input type="checkbox" name="ids" value="{{ s.id }}" style="width:auto;flex:none;accent-color:var(--accent)">
-      <a href="/transcripts/{{ s.id }}" class="grow" style="color:inherit;display:flex;align-items:center;gap:12px;min-width:0">
+      <a href="{{ base }}/transcripts/{{ s.id }}" class="grow" style="color:inherit;display:flex;align-items:center;gap:12px;min-width:0">
         <div class="av">🎙️</div>
         <div style="min-width:0"><div class="name">{{ s.who or 'Conversation #' ~ s.id }}</div>
           <div class="muted">{{ s.n_segments }} segments · {{ s.created_at|localtime }}</div></div>
@@ -34,12 +34,12 @@
 
 <div class="card">
   <h2>Manage topic</h2>
-  <form method="post" action="/topics/{{ tag.id }}/rename" class="field" style="margin-bottom:10px">
+  <form method="post" action="{{ base }}/topics/{{ tag.id }}/rename" class="field" style="margin-bottom:10px">
     <input name="name" value="{{ tag.name }}">
     <button class="btn ghost">Rename</button>
   </form>
   {% if all_tags %}
-  <form method="post" action="/topics/{{ tag.id }}/merge" class="field"
+  <form method="post" action="{{ base }}/topics/{{ tag.id }}/merge" class="field"
         onsubmit="return confirm('Merge #{{ tag.name }} into the selected topic? This cannot be undone.')">
     <select name="target">
       {% for t in all_tags %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}

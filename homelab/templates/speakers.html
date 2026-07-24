@@ -5,7 +5,7 @@
 tasks and resolve "my wife asked…". Edit and <b>Save</b>.</p>
 
 {% if unknown_n %}
-<a href="/unknown" class="card" style="display:block;color:inherit;border-color:#4c4329">
+<a href="{{ base }}/unknown" class="card" style="display:block;color:inherit;border-color:#4c4329">
   <div class="row" style="border:none;padding:0">
     <div class="av" style="--hue:40">?</div>
     <div class="grow"><div class="name">{{ unknown_n }} unknown voice{{ 's' if unknown_n != 1 }} to name</div>
@@ -16,7 +16,7 @@ tasks and resolve "my wife asked…". Edit and <b>Save</b>.</p>
 {% endif %}
 
 {% if enrolled %}
-<form method="post" action="/roster/save">
+<form method="post" action="{{ base }}/roster/save">
   <datalist id="rels">
     <option>wife</option><option>husband</option><option>partner</option><option>girlfriend</option>
     <option>boyfriend</option><option>mom</option><option>dad</option><option>son</option>
@@ -30,7 +30,7 @@ tasks and resolve "my wife asked…". Edit and <b>Save</b>.</p>
       <div class="grow">
         <input name="name_{{ s.id }}" value="{{ s.name or '' }}" placeholder="Name" autocomplete="off">
       </div>
-      <a class="chip" href="/speakers/{{ s.id }}">profile ›</a>
+      <a class="chip" href="{{ base }}/speakers/{{ s.id }}">profile ›</a>
     </div>
     <div class="field" style="align-items:center">
       <input name="rel_{{ s.id }}" list="rels" value="{{ s.relationship or '' }}"
@@ -41,7 +41,7 @@ tasks and resolve "my wife asked…". Edit and <b>Save</b>.</p>
                style="width:auto;margin-right:5px"> this is me
       </label>
       <button class="x" title="Delete this person + their data"
-              formaction="/speakers/{{ s.id }}/delete"
+              formaction="{{ base }}/speakers/{{ s.id }}/delete"
               onclick="return confirm('Delete {{ s.label }} and all their data? Removes their voiceprint, profile, tasks, and their lines from transcripts.')">🗑</button>
     </div>
     <div class="muted" style="font-size:.74rem;margin-top:6px">{{ s.n_segments }} segments{% if s.do_not_profile %} · profiling off{% endif %}</div>
@@ -54,6 +54,6 @@ tasks and resolve "my wife asked…". Edit and <b>Save</b>.</p>
 </form>
 {% else %}
 <div class="card"><div class="empty">No known people yet — voices get named on the
-{% if unknown_n %}<a href="/unknown">unknowns page</a>{% else %}unknowns page once captured{% endif %}.</div></div>
+{% if unknown_n %}<a href="{{ base }}/unknown">unknowns page</a>{% else %}unknowns page once captured{% endif %}.</div></div>
 {% endif %}
 {% endblock %}

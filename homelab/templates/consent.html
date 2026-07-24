@@ -20,9 +20,9 @@
 
   {% if accepted_at %}
   <div class="empty" style="color:var(--good);padding:8px 0">✓ Accepted on {{ accepted_at }} —
-  naming is enabled. <a href="/unknown">Name voices →</a></div>
+  naming is enabled. <a href="{{ base }}/unknown">Name voices →</a></div>
   {% else %}
-  <form method="post" action="/consent/accept">
+  <form method="post" action="{{ base }}/consent/accept">
     <button class="btn" style="width:100%;padding:13px">I understand &amp; have permission — enable naming</button>
   </form>
   {% endif %}

@@ -4,10 +4,10 @@
 <p class="sub">Your day, captured and sorted.</p>
 
 <div class="statbar">
-  <a href="/speakers"><b>{{ counts.speakers }}</b><span>people</span></a>
-  <a href="/tasks"><b>{{ open_count }}</b><span>open tasks</span></a>
-  <a href="/unknown"><b>{{ unknowns|length }}</b><span>to name</span></a>
-  <a href="/activity"><b>{{ new_count }}</b><span>new</span></a>
+  <a href="{{ base }}/speakers"><b>{{ counts.speakers }}</b><span>people</span></a>
+  <a href="{{ base }}/tasks"><b>{{ open_count }}</b><span>open tasks</span></a>
+  <a href="{{ base }}/unknown"><b>{{ unknowns|length }}</b><span>to name</span></a>
+  <a href="{{ base }}/activity"><b>{{ new_count }}</b><span>new</span></a>
 </div>
 
 <div class="card" id="qbanner" style="border-color:#3a4a6a;display:none;align-items:center;gap:10px">
@@ -19,7 +19,7 @@
 (function(){
   var el=document.getElementById('qbanner');
   function tick(){
-    fetch('/queue.json',{cache:'no-store'}).then(function(r){return r.json();}).then(function(q){
+    fetch('{{ base }}/queue.json',{cache:'no-store'}).then(function(r){return r.json();}).then(function(q){
       if (q.pending>0 || q.state==='processing' || q.state==='deferred'){
         el.style.display='flex';
         var proc = q.state==='processing';
@@ -34,7 +34,7 @@
 })();
 </script>
 
-<form class="field" method="post" action="/tasks/add" style="margin:0 0 18px">
+<form class="field" method="post" action="{{ base }}/tasks/add" style="margin:0 0 18px">
   <input name="action" placeholder="✏️  Add a task…" autocomplete="off" required>
   <button class="btn">Add</button>
 </form>
@@ -50,7 +50,7 @@
     <div class="av" style="--hue:{{ 150 if ch.done else 40 }}">{{ '✅' if ch.done else '◯' }}</div>
     <div class="grow"><div class="name" style="white-space:normal{% if ch.done %};opacity:.6{% endif %}">{{ ch.text }}</div></div>
   </div>{% endfor %}
-  <form method="post" action="/settings/calibration/golive" style="margin-top:10px"
+  <form method="post" action="{{ base }}/settings/calibration/golive" style="margin-top:10px"
         onsubmit="return confirm('Go live? Restores the normal auto-add bar and turns Google sync back on.')">
     <button class="btn" style="width:100%;padding:12px">🚀 Go live</button>
   </form>
@@ -74,11 +74,11 @@
   <div class="row" style="border:none;padding:0;gap:10px;flex-wrap:wrap">
     <div class="av" style="--hue:265">📈</div>
     <div class="grow"><div class="name" style="white-space:normal">{{ feedback.text }}</div></div>
-    <form method="post" action="/feedback/apply" style="display:inline">
+    <form method="post" action="{{ base }}/feedback/apply" style="display:inline">
       <input type="hidden" name="dir" value="{{ feedback.dir }}">
       <button class="btn" style="padding:8px 13px">Set to {{ feedback.to }}</button>
     </form>
-    <form method="post" action="/feedback/dismiss" style="display:inline">
+    <form method="post" action="{{ base }}/feedback/dismiss" style="display:inline">
       <button class="btn ghost" style="padding:8px 13px">Not now</button>
     </form>
   </div>
@@ -122,32 +122,32 @@
     {% for s in samples[u.id] %}
       <div class="row" style="border:none">
         <div class="grow">{{ s.text }}</div>
-        <audio controls preload="none" src="/segment/{{ s.id }}/audio.wav"></audio>
+        <audio controls preload="none" src="{{ base }}/segment/{{ s.id }}/audio.wav"></audio>
       </div>
     {% endfor %}
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
       {% if consent_ok %}
       {% if enrolled %}
-      <form class="field" hx-post="/speakers/{{ u.id }}/merge"
+      <form class="field" hx-post="{{ base }}/speakers/{{ u.id }}/merge"
             hx-target="#unk-{{ u.id }}" hx-swap="outerHTML">
         <select name="target">
           {% for e in enrolled %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}
         </select>
         <button class="btn ghost">Merge into ↑</button>
       </form>{% endif %}
-      <form class="field" hx-post="/speakers/{{ u.id }}/name"
+      <form class="field" hx-post="{{ base }}/speakers/{{ u.id }}/name"
             hx-target="#unk-{{ u.id }}" hx-swap="outerHTML">
         <input name="name" placeholder="Name as a new person">
         <button class="btn">Save</button>
       </form>
       {% else %}
-      <a class="muted" href="/consent">🤝 Accept the naming policy to name voices →</a>
+      <a class="muted" href="{{ base }}/consent">🤝 Accept the naming policy to name voices →</a>
       {% endif %}
     </div>
   </div>
 {% endfor %}
 {% if unknowns|length > 3 %}
-  <a class="muted" href="/unknown">+ {{ unknowns|length - 3 }} more unknown voices →</a>{% endif %}
+  <a class="muted" href="{{ base }}/unknown">+ {{ unknowns|length - 3 }} more unknown voices →</a>{% endif %}
 {% endif %}
 
 <div class="sec">📋 Up next</div>
@@ -155,7 +155,7 @@
   <div class="card"{% if label == 'Overdue' %} style="border-color:#5a2a32"{% endif %}>
     <h2{% if label == 'Overdue' %} style="color:#ff8a8a"{% endif %}>{{ label }} · {{ items|length }}</h2>
     {% for i in items[:6] %}{% include "_task.html" %}{% endfor %}
-    {% if items|length > 6 %}<a class="muted" href="/tasks">+ {{ items|length - 6 }} more →</a>{% endif %}
+    {% if items|length > 6 %}<a class="muted" href="{{ base }}/tasks">+ {{ items|length - 6 }} more →</a>{% endif %}
   </div>
 {% else %}
   <div class="card"><div class="empty">No open tasks — you're all caught up ✨</div></div>
@@ -164,7 +164,7 @@
 <div class="sec">🎙️ Recently captured</div>
 <div class="card">
   {% for t in transcripts %}
-    <a href="/transcripts/{{ t.id }}" class="row" style="color:inherit;--hue:{{ t.id|hue }}">
+    <a href="{{ base }}/transcripts/{{ t.id }}" class="row" style="color:inherit;--hue:{{ t.id|hue }}">
       <div class="av">🎙️</div>
       <div class="grow">
         <div class="name">Conversation #{{ t.id }}</div>

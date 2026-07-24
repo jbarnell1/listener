@@ -8,10 +8,10 @@ as you like and <b>Save all</b> in one go.</p>
 {% if unknowns and not consent_ok %}
 <div class="card" style="border-color:#4c4329">
   <div class="empty" style="padding:16px 0">🤝 Naming a voice links it to a real person.
-  <a href="/consent">Review &amp; accept the naming policy</a> to enable identifying voices.</div>
+  <a href="{{ base }}/consent">Review &amp; accept the naming policy</a> to enable identifying voices.</div>
 </div>
 {% elif unknowns %}
-<form method="post" action="/unknown/batch">
+<form method="post" action="{{ base }}/unknown/batch">
 {% for u in unknowns %}
   <div class="card" style="--hue:{{ u.id|hue }}">
     <div class="row" style="border:none;padding-bottom:6px">
@@ -22,7 +22,7 @@ as you like and <b>Save all</b> in one go.</p>
     {% for s in samples[u.id] %}
       <div class="row">
         <div class="grow">{{ s.text }} <span class="muted">[{{ '%.1f'|format(s.t_start) }}s]</span></div>
-        <audio controls preload="none" src="/segment/{{ s.id }}/audio.wav"></audio>
+        <audio controls preload="none" src="{{ base }}/segment/{{ s.id }}/audio.wav"></audio>
       </div>
     {% endfor %}
     <div style="display:flex;flex-direction:column;gap:9px;margin-top:12px">

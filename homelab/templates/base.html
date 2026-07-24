@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% block title %}Listener{% endblock %}</title>
 <meta name="theme-color" content="#0a0c10">
-<link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/static/icon.svg">
+<link rel="manifest" href="{{ base }}/manifest.webmanifest">
+<link rel="icon" href="{{ base }}/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="{{ base }}/static/icon.svg">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Listener">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<script src="/static/htmx.min.js"></script>
+<script src="{{ base }}/static/htmx.min.js"></script>
 <style>
 :root{
   --bg:#0a0c10; --bg2:#0f131a; --card:#141a25; --card2:#1a2230; --border:#232e3e;
@@ -150,25 +150,25 @@ nav.bottom a.active{color:var(--accent)}
 </head>
 <body>
 <header class="top"><div class="wrap"><span class="brand">🎧 Listener</span>
-  <a href="/timeline" class="bell" style="margin-left:auto" aria-label="Timeline">🕑</a>
-  <a href="/search" class="bell" style="margin-left:16px" aria-label="Search">🔍</a>
-  <a href="/activity" class="bell" style="margin-left:16px" aria-label="What's new">🔔{% if new_count %}<span class="badge">{{ new_count if new_count < 100 else '99+' }}</span>{% endif %}</a>
+  <a href="{{ base }}/timeline" class="bell" style="margin-left:auto" aria-label="Timeline">🕑</a>
+  <a href="{{ base }}/search" class="bell" style="margin-left:16px" aria-label="Search">🔍</a>
+  <a href="{{ base }}/activity" class="bell" style="margin-left:16px" aria-label="What's new">🔔{% if new_count %}<span class="badge">{{ new_count if new_count < 100 else '99+' }}</span>{% endif %}</a>
 </div></header>
 {% if device_alert %}
-<div class="wrap"><a href="/settings" id="devbanner" class="devbanner {{ device_alert.level }}"
+<div class="wrap"><a href="{{ base }}/settings" id="devbanner" class="devbanner {{ device_alert.level }}"
    data-key="{{ device_alert.text }}">{{ device_alert.icon }} {{ device_alert.text }}
    <span class="x" onclick="event.preventDefault();event.stopPropagation();LSbanner.dismiss()">✕</span></a></div>
 {% endif %}
 <main><div class="wrap">{% block body %}{% endblock %}</div></main>
 
 <nav class="bottom">
-  <a href="/" class="{{ 'active' if active=='home' }}"><span class="ic">🏠</span>Home</a>
-  <a href="/tasks" class="{{ 'active' if active=='tasks' }}"><span class="ic">✅</span>Tasks
+  <a href="{{ base }}/" class="{{ 'active' if active=='home' }}"><span class="ic">🏠</span>Home</a>
+  <a href="{{ base }}/tasks" class="{{ 'active' if active=='tasks' }}"><span class="ic">✅</span>Tasks
     {% if review_count %}<span class="nav-badge">{{ review_count if review_count < 100 else '99+' }}</span>{% endif %}</a>
-  <a href="/topics" class="{{ 'active' if active=='topics' }}"><span class="ic">🏷️</span>Topics</a>
-  <a href="/speakers" class="{{ 'active' if active=='speakers' }}"><span class="ic">👥</span>Speakers
+  <a href="{{ base }}/topics" class="{{ 'active' if active=='topics' }}"><span class="ic">🏷️</span>Topics</a>
+  <a href="{{ base }}/speakers" class="{{ 'active' if active=='speakers' }}"><span class="ic">👥</span>Speakers
     {% if unknown_count %}<span class="nav-badge">{{ unknown_count if unknown_count < 100 else '99+' }}</span>{% endif %}</a>
-  <a href="/settings" class="{{ 'active' if active=='settings' }}"><span class="ic">⚙️</span>Settings</a>
+  <a href="{{ base }}/settings" class="{{ 'active' if active=='settings' }}"><span class="ic">⚙️</span>Settings</a>
 </nav>
 
 <button class="fab" onclick="LS.openChat()">✨</button>
@@ -218,7 +218,7 @@ const LS = {
     this.add('user', q);
     let tools=null, bot=null;
     const think=this.add('bot think','💭 thinking…');   // working indicator until text streams
-    const es = new EventSource('/assistant/stream?q='+encodeURIComponent(q)+'&sid='+this.sid);
+    const es = new EventSource('{{ base }}/assistant/stream?q='+encodeURIComponent(q)+'&sid='+this.sid);
     es.onmessage = (e)=>{ const d=JSON.parse(e.data);
       if(d.type==='token'){ if(think){think.remove();} if(!bot) bot=this.add('bot',''); bot.textContent+=d.text; }
       else if(d.type==='tool'){ if(think){think.textContent='🔧 running '+d.name+'…';}
@@ -251,7 +251,7 @@ function LSplay(btn, src){
 }
 // PWA: register the service worker for installability + offline app shell.
 if('serviceWorker' in navigator){
-  window.addEventListener('load', ()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+  window.addEventListener('load', ()=>navigator.serviceWorker.register('{{ base }}/sw.js', {scope:'{{ base }}/'}).catch(()=>{}));
 }
 // Device banner: dismiss persists until the device's state (the text) changes.
 const LSbanner={dismiss(){const b=document.getElementById('devbanner');

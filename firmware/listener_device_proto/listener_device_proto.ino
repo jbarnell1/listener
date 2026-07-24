@@ -15,12 +15,12 @@
 // ---------- CONFIG ----------
 struct Net { const char* ssid; const char* pass; };
 Net networks[] = {                         // <<< 1) your WiFi networks (home + hotspot)
-  { "YOUR_HOME_WIFI",   "YOUR_HOME_PASSWORD" },
-  { "YOUR_PHONE_HOTSPOT", "YOUR_HOTSPOT_PASSWORD" },
+  { "SETUP-4AA8",   "filter0239fence" },
+  { "Pixel_9518", "061798jb" },
 };
 
 // <<< 2) paste the secret: in WSL run  grep LISTENER_INGEST_SECRET ~/.listener.env
-const char* INGEST_SECRET = "PASTE_64_HEX_SECRET_HERE";
+const char* INGEST_SECRET = "b8d33ecb87f1392fb952665b8feede3584a833eaf7eff11dd158a0305d0285df";
 
 // Already set for you (Tailscale Funnel, public, HMAC-locked):
 const char* INGEST_URL = "https://jon-desktop.taildc59f0.ts.net:8443/ingest";

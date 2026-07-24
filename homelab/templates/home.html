@@ -61,7 +61,7 @@
 <div class="card" style="border-color:#2c4d3e">
   <h2>✨ Get set up</h2>
   {% for s in setup %}
-  <a href="{{ s.href }}" class="row" style="color:inherit">
+  <a href="{{ base }}{{ s.href }}" class="row" style="color:inherit">
     <div class="av" style="--hue:{{ 150 if s.done else 210 }}">{{ '✅' if s.done else s.icon }}</div>
     <div class="grow"><div class="name" {% if s.done %}style="opacity:.55;text-decoration:line-through"{% endif %}>{{ s.text }}</div></div>
     {% if not s.done %}<span class="chevron">›</span>{% endif %}
@@ -102,7 +102,7 @@
 <div class="card" style="border-color:#3a4a6a">
   <h2>Needs your review</h2>
   {% for r in review %}
-  <a href="{{ r.href }}" class="row" style="color:inherit">
+  <a href="{{ base }}{{ r.href }}" class="row" style="color:inherit">
     <div class="av" style="--hue:230">{{ r.icon }}</div>
     <div class="grow"><div class="name">{{ r.text }}</div></div>
     <span class="chevron">›</span>

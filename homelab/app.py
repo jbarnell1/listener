@@ -670,8 +670,9 @@ def rebuild_profile(sid: int):
 def name_speaker(request: Request, sid: int, name: str = Form(...)):
     if not _consent_ok():                            # identify-time consent gate (ADR-039)
         if _hx(request):
-            return HTMLResponse('<div class="card"><div class="empty">First accept the '
-                                '<a href="/consent">naming policy</a> to identify voices.</div></div>')
+            _b = request.scope.get("root_path", "")
+            return HTMLResponse(f'<div class="card"><div class="empty">First accept the '
+                                f'<a href="{_b}/consent">naming policy</a> to identify voices.</div></div>')
         return RedirectResponse("/consent", status_code=303)
     nm = name.strip()
     db.rename_speaker(db.connect(), sid, nm)
@@ -685,8 +686,9 @@ def name_speaker(request: Request, sid: int, name: str = Form(...)):
 def merge_speaker(request: Request, sid: int, target: int = Form(...)):
     if not _consent_ok():                            # identify-time consent gate (ADR-039)
         if _hx(request):
-            return HTMLResponse('<div class="card"><div class="empty">First accept the '
-                                '<a href="/consent">naming policy</a> to identify voices.</div></div>')
+            _b = request.scope.get("root_path", "")
+            return HTMLResponse(f'<div class="card"><div class="empty">First accept the '
+                                f'<a href="{_b}/consent">naming policy</a> to identify voices.</div></div>')
         return RedirectResponse("/consent", status_code=303)
     db.merge_speakers(db.connect(), sid, target)
     who = db.get_speaker(db.connect(), target)

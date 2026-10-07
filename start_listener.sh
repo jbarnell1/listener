@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launch Listener mounted under /listener (path-based PWA hosting; Tailscale strips the
-# prefix so uvicorn --root-path tells the app its external mount point for URL generation).
-cd /mnt/c/Listener/homelab
-exec /home/jbarnell/listener-web/bin/uvicorn app:app --host 0.0.0.0 --port 8000 --root-path /listener
+# Boot entry point (C:\pwa-autostart\start-pwas.ps1). Delegates to homelab/listener.sh, the one
+# launch path (ADR-056): it loads ~/.listener.env (ingest secret, Gmail), clears strays, starts
+# uvicorn under --root-path /listener and waits until it answers.
+exec bash /mnt/c/Listener/homelab/listener.sh up

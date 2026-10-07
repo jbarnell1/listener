@@ -5,6 +5,20 @@ is reversed, add a new entry rather than editing the old one.
 
 ## Decisions
 
+### ADR-056 - One launcher, always under /listener
+**2026-10-07.** The dashboard is served by Tailscale at `/listener` (prefix stripped), and the
+base-path work of 2026-07-24 makes every link, the manifest and the service worker follow the
+mount root. But two launchers disagreed: `start_listener.sh` (boot) passed `--root-path
+/listener` and loaded no credentials, while `homelab/listener.sh` (`listener restart` and the
+watchdog) loaded `~/.listener.env` but passed no root path. The process running since a
+watchdog restart on 2026-09-30 therefore linked its scripts at the host root (404 through
+Tailscale) and served a manifest scoped to `/`, which on Android would claim every app on the
+host. Now `listener.sh up` is the only launch path (the boot script delegates to it) and always
+passes `--root-path /listener`. Checked before deploying by driving the app as uvicorn would:
+all links under `/listener/`, assets 200, manifest scope `/listener/`, and the Funnel's
+`/ingest` and `/telemetry` still route (401 unsigned). The `LISTENER_BASE_PATH` mount stays for
+a proxy that keeps the prefix; it is not used here.
+
 ### ADR-055 — Dashboard-tunable diarization sensitivity (brief interjections)
 **2026-06-26.** Brief 1–2 s interjections were sometimes missed and their words attributed to
 the dominant speaker. This is NOT a one-speaker-per-chunk limit (pyannote detects multiple

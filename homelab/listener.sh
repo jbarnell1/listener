@@ -16,7 +16,11 @@ up(){
   cd "$APP" || { echo "listener: can't cd $APP"; return 1; }
   # load private creds (Gmail app password, etc.) into the app's environment
   [ -f "$HOME/.listener.env" ] && { set -a; . "$HOME/.listener.env"; set +a; }
-  setsid "$WEB/uvicorn" app:app --host 0.0.0.0 --port 8000 >"$LOG" 2>&1 </dev/null &
+  # Tailscale serves the dashboard at /listener and strips that prefix; --root-path puts it back
+  # into every link, the manifest scope and the service worker (ADR-056). The Funnel's /ingest
+  # and /telemetry still route: Starlette matches paths with or without the prefix.
+  setsid "$WEB/uvicorn" app:app --host 0.0.0.0 --port 8000 --root-path /listener \
+    >"$LOG" 2>&1 </dev/null &
   disown 2>/dev/null || true
   printf 'listener: starting'
   for _ in $(seq 1 30); do

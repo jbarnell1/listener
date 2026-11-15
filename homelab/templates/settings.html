@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">Settings</h1>
+<p class="sub">Your device + the local services powering this dashboard.</p>
+
+{% if devices %}{% for d in devices %}
+<div class="card" style="--hue:{{ 145 if d.online else 5 }}">
+  <h2>🎧 Device · {{ d.id }}</h2>
+  <div class="name">
+    {% if d.online %}<span class="chip good">🟢 online</span>{% else %}<span class="chip unk">⚪ offline</span>{% endif %}
+    <span class="muted">· last seen {{ d.ago }}</span>
+  </div>
+  <div class="muted" style="margin-top:3px">📶 {{ d.ssid or '-' }}{% if d.rssi %} · {{ d.rssi }} dBm{% endif %}</div>
+  {% if d.battery_pct is not none %}
+  <div style="display:flex;align-items:center;gap:10px;margin:9px 0">
+    <div style="flex:1;height:12px;border-radius:7px;background:var(--bg2);border:1px solid var(--border);overflow:hidden">
+      <div style="height:100%;width:{{ d.battery_pct }}%;background:{{ 'var(--good)' if d.battery_pct > 20 else 'var(--warn)' }}"></div>
+    </div>
+    <span class="name" style="font-variant-numeric:tabular-nums">🔋 {{ d.battery_pct }}%</span>
+    <span class="muted">{{ '%.2f'|format(d.battery_mv / 1000) }}V</span>
+  </div>
+  {% else %}<div class="muted" style="margin:6px 0">🔋 battery n/a (no sense divider on this board)</div>{% endif %}
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+    <span class="chip">IP {{ d.ip or '-' }}</span>
+    <span class="chip">up {{ d.uptime }}</span>
+    {% if d.free_heap %}<span class="chip">heap {{ d.free_heap // 1024 }}KB</span>{% endif %}
+    <span class="chip">fw {{ d.fw or '-' }}</span>
+    <span class="chip">pkt #{{ d.seq }}</span>
+  </div>
+</div>
+{% endfor %}{% else %}
+<div class="card"><div class="empty">No device has reported yet - telemetry appears here once the wearable checks in.</div></div>
+{% endif %}
+
+<div class="card">
+  <h2>🔑 Device keys</h2>
+  <p class="muted" style="margin:0 0 10px">Per-device HMAC secrets, so a lost board can be
+  <b>revoked on its own</b> without re-keying the rest. A device with no key here still uses
+  the shared secret (legacy, until its firmware is updated to send <code>X-Device</code>).</p>
+  {% for d in device_keys %}
+    <div class="row">
+      <div class="grow"><div class="name">{{ d.device_id }}{% if d.label %} <span class="muted">· {{ d.label }}</span>{% endif %}</div>
+        <div class="muted">{% if d.active %}<span style="color:var(--good)">active</span>{% else %}revoked{% endif %} · issued {{ d.created_at }}</div></div>
+      <form method="post" action="{{ base }}/settings/devices/{{ d.device_id }}/toggle">
+        <button class="btn ghost" style="padding:7px 12px">{{ 'Revoke' if d.active else 'Re-enable' }}</button>
+      </form>
+    </div>
+  {% endfor %}
+  <form class="field" method="post" action="{{ base }}/settings/devices/new" style="margin-top:10px">
+    <input name="device_id" placeholder="device id (e.g. listener-01)" required>
+    <input name="label" placeholder="label (optional)">
+    <button class="btn">Issue key</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Assistant · MCP server</h2>
+  <div class="row" style="border:none;padding-top:0">
+    <div class="av" style="--hue:265">✨</div>
+    <div class="grow">
+      <div class="name">Status:
+        {% if mcp_running %}<span class="chip good">running</span>
+        {% else %}<span class="chip unk">stopped</span>{% endif %}
+      </div>
+      <div class="muted">Model <b>{{ model }}</b> · tools served over MCP on 127.0.0.1:8765</div>
+    </div>
+  </div>
+  <div class="field" style="margin-top:12px">
+    <form method="post" action="{{ base }}/settings/mcp/restart"><button class="btn">Restart</button></form>
+    <form method="post" action="{{ base }}/settings/mcp/start"><button class="btn ghost">Start</button></form>
+    <form method="post" action="{{ base }}/settings/mcp/stop"><button class="btn ghost">Stop</button></form>
+  </div>
+  <p class="muted" style="margin:.8em 0 0">If the assistant stops responding (e.g. after a
+  WSL hiccup while you're away), Restart here brings the tool server back.</p>
+</div>
+
+<div class="card">
+  <h2>Pipeline worker</h2>
+  <div class="row" style="border:none;padding-top:0">
+    <div class="av" style="--hue:200">⚙️</div>
+    <div class="grow">
+      <div class="name">Status:
+        {% if worker_running %}<span class="chip good">running</span>
+        {% else %}<span class="chip unk">stopped</span>{% endif %}
+        {% if worker.state %}<span class="muted">· {{ worker.state }}{% if worker.detail %} - {{ worker.detail }}{% endif %}</span>{% endif %}
+      </div>
+      <div class="muted">ASR <b>{{ asr_model }}</b> · transcribe → diarize → ID → intents → profile</div>
+    </div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin:.6em 0">
+    <span class="chip">queue: {{ queue.pending }} pending{% if backlog_age %} · oldest {{ backlog_age }}{% endif %}</span>
+    <span class="chip good">{{ queue.done }} done</span>
+    {% if queue.failed %}<span class="chip unk">{{ queue.failed }} failed</span>{% endif %}
+    <span class="chip {{ 'good' if gpu_clear else 'unk' }}">GPU {{ 'clear' if gpu_clear else 'busy' }} · {{ gpu_detail }}</span>
+  </div>
+  <div class="field">
+    <form method="post" action="{{ base }}/settings/worker/restart"><button class="btn">Restart</button></form>
+    <form method="post" action="{{ base }}/settings/worker/start"><button class="btn ghost">Start</button></form>
+    <form method="post" action="{{ base }}/settings/worker/stop"><button class="btn ghost">Stop</button></form>
+  </div>
+  <form class="field" method="post" action="{{ base }}/settings/llm-model" style="margin-top:10px">
+    <label class="muted" style="align-self:center;white-space:nowrap">Pipeline LLM</label>
+    <input name="model" value="{{ llm_model }}" placeholder="qwen3:8b">
+    <button class="btn ghost">Save model</button>
+  </form>
+  <p class="muted" style="margin:.8em 0 0">Local Ollama model for intents/profiles/tags -
+  hot-swappable, applies on the next chunk (must already be <code>ollama pull</code>ed).
+  Drains audio when the GPU is free (pauses while you game - ADR-015); backlog self-heals.</p>
+</div>
+
+<div class="card">
+  <h2>Email · nightly brief</h2>
+  {% if mail == 'sent' %}
+    <div class="empty" style="color:var(--good);padding:8px 0">✓ Test email sent - check
+    <b>All Mail / Spam</b> (mail to yourself can skip the Inbox).</div>
+  {% elif mail == 'error' %}
+    <div class="empty" style="color:var(--warn);padding:8px 0">⚠ Send failed - check the app log
+    (<code>listener logs</code>).</div>
+  {% elif mail == 'noconfig' %}
+    <div class="empty" style="color:var(--warn);padding:8px 0">No credentials loaded - add them
+    to <code>~/.listener.env</code> and <code>listener restart</code>.</div>
+  {% endif %}
+  <div class="row" style="border:none;padding-top:0">
+    <div class="av" style="--hue:150">✉️</div>
+    <div class="grow">
+      <div class="name">Status:
+        {% if mail_configured %}<span class="chip good">configured</span>
+        {% else %}<span class="chip unk">not set up</span>{% endif %}
+      </div>
+      <div class="muted">
+        {% if mail_configured %}Sends to <b>{{ mail_to }}</b> nightly at <b>{{ brief_time }}</b>
+        {% else %}Add Gmail credentials to <code>~/.listener.env</code>, then restart{% endif %}
+      </div>
+    </div>
+  </div>
+  {% if mail_configured %}
+  <div class="field" style="margin-top:12px;flex-wrap:wrap;gap:8px">
+    <form method="post" action="{{ base }}/settings/mail/test"><button class="btn">Send test email</button></form>
+    <form method="post" action="{{ base }}/settings/brief-time" style="display:flex;align-items:center;gap:8px">
+      <label class="muted" for="brief-time">Send at</label>
+      <input type="time" id="brief-time" name="t" value="{{ brief_time_val }}" required
+             style="width:auto">
+      <button class="btn ghost">Save time</button>
+    </form>
+  </div>
+  {% endif %}
+  <p class="muted" style="margin:.8em 0 0">Currently <b>{{ brief_time }}</b> local. Keep it before
+  midnight so the next morning's Google Daily Brief picks it up. Credentials live only in WSL -
+  never committed.</p>
+</div>
+
+<div class="card">
+  <h2>📲 Phone notifications</h2>
+  <p class="muted" style="margin:0 0 10px">Get battery (low / charged) and "device went quiet"
+  alerts pushed to this phone. Falls back to email if you don't enable this.
+  <b>Android:</b> install Listener first (Chrome menu → <i>Add to Home screen</i>), open it from
+  the home-screen icon, then tap Enable.</p>
+  <button class="btn" id="pushBtn" onclick="enablePush()">🔔 Enable on this device</button>
+  <button class="btn" id="pushTest" onclick="testPush()" style="display:none">Send test</button>
+  <p class="muted" id="pushMsg" style="margin:.7em 0 0"></p>
+</div>
+<script>
+function u8(b){b=b.replace(/-/g,'+').replace(/_/g,'/');const r=atob(b+'='.repeat((4-b.length%4)%4));
+  return Uint8Array.from([...r].map(c=>c.charCodeAt(0)));}
+async function enablePush(){
+  const msg=document.getElementById('pushMsg');
+  try{
+    if(!('serviceWorker'in navigator)||!('PushManager'in window)){msg.textContent='This browser can’t do push. On Android use Chrome + Add to Home screen.';return;}
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){msg.textContent='Notifications were blocked. Allow them in the browser/site settings, then retry.';return;}
+    const reg=await navigator.serviceWorker.ready;
+    const key=await (await fetch('{{ base }}/push/key')).json();
+    const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(key.key)});
+    const r=await fetch('{{ base }}/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sub)});
+    if(r.ok){msg.textContent='✅ Enabled on this device.';document.getElementById('pushTest').style.display='';}
+    else msg.textContent='Subscribe failed ('+r.status+').';
+  }catch(e){msg.textContent='Couldn’t enable: '+e.message;}
+}
+async function testPush(){
+  const r=await (await fetch('{{ base }}/push/test',{method:'POST'})).json();
+  document.getElementById('pushMsg').textContent=r.delivered?'Test sent - check your notifications.':'No active subscriptions delivered.';
+}
+</script>
+
+<div class="card">
+  <h2>Google Calendar &amp; Tasks</h2>
+  {% if google_msg == 'ok' %}
+    <div class="empty" style="color:var(--good);padding:6px 0">✓ Google reconnected - queued items synced.</div>
+  {% elif google_msg == 'err' %}
+    <div class="empty" style="color:var(--warn);padding:6px 0">⚠ Reconnect failed - check the Web client + redirect URI (see below), then retry. Details in <code>listener logs</code>.</div>
+  {% endif %}
+  <div class="row" style="border:none;padding-top:0">
+    <div class="av" style="--hue:25">📅</div>
+    <div class="grow">
+      <div class="name">Status:
+        {% if google.connected %}<span class="chip good">connected</span>
+          {% if google_paused %}<span class="chip unk">⏸ paused</span>
+          {% else %}<span class="chip good">syncing</span>{% endif %}
+        {% else %}<span class="chip unk">not connected</span>{% endif %}
+      </div>
+      <div class="muted">events → Calendar · to-dos → Tasks · undated → email digest</div>
+    </div>
+  </div>
+  <div class="field" style="margin-top:12px">
+    <a class="btn" href="{{ base }}/google/start">🔗 {{ 'Reconnect' if google.connected else 'Connect' }} Google (here, no CLI)</a>
+  </div>
+  <details style="margin-top:.6em">
+    <summary class="muted" style="cursor:pointer">one-time setup for the in-browser flow</summary>
+    <p class="muted" style="margin:.5em 0 0;font-size:.8rem">Needs a <b>Web</b> OAuth client (the CLI
+    one is Desktop-only). In Google Cloud Console → Credentials → Create OAuth client → <b>Web
+    application</b>; add redirect URI <code>{{ google_redirect }}</code>; download JSON to
+    <code>~/.listener-gcp/client_secret_web.json</code>. Then this button does the whole re-auth
+    from your phone.</p>
+  </details>
+  {% if google.connected %}
+  <div class="field" style="margin-top:12px">
+    <form method="post" action="{{ base }}/settings/google/toggle">
+      <button class="btn {{ 'ghost' if not google_paused else '' }}">
+        {{ 'Resume Google sync' if google_paused else 'Pause Google sync' }}</button>
+    </form>
+  </div>
+  {% if google_paused %}
+  <p class="muted" style="margin:.7em 0 0;color:var(--warn)">⏸ <b>Shutoff valve engaged.</b>
+    New items still reach your <b>email digest</b> and this dashboard, but nothing is pushed to
+    - or removed from - Google Calendar/Tasks until you resume. Resuming flushes the backlog.</p>
+  {% else %}
+  <p class="muted" style="margin:.7em 0 0">Emergency shutoff: pause to stop Listener writing to
+    your real calendar without disconnecting - email + dashboard keep working.</p>
+  {% endif %}
+  {% else %}
+  <p class="muted" style="margin:.7em 0 0">
+    {% if google.client_secret %}OAuth client present - run
+    <code>python google_sync.py --auth</code> in WSL once to authorize.
+    {% else %}Add your OAuth client JSON to <code>~/.listener-gcp/client_secret.json</code>,
+    then run <code>python google_sync.py --auth</code>.{% endif %}
+  </p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>🧠 About me <span class="muted" style="font-weight:400;font-size:.78rem">· core memory</span></h2>
+  <p class="muted" style="margin:0 0 10px">Durable facts about you that ground <b>every</b>
+  extraction - work schedule, household, preferences, how you refer to places/people. The
+  model sees this on every conversation, so keep it short and stable.</p>
+  <form method="post" action="{{ base }}/settings/core-memory">
+    <textarea name="core" rows="5" placeholder="- I work from home Tuesdays and Thursdays&#10;- My partner is Sam; our dog is Pepper&#10;- I prefer texts over phone calls&#10;- 'the office' = my downtown coworking space">{{ core_memory }}</textarea>
+    <div class="field" style="margin-top:10px"><button class="btn">Save</button></div>
+  </form>
+</div>
+
+<div class="card" style="{{ 'border-color:#4c4329' if calibrating }}">
+  <h2>🧪 Calibration mode</h2>
+  {% if calibrating %}
+  <p class="muted" style="margin:0 0 10px"><b>Active</b> - auto-add bar raised, Google sync
+  paused. Review locally; the dashboard shows your graduation checklist. Go live when it's
+  trustworthy.</p>
+  <form method="post" action="{{ base }}/settings/calibration/golive"><button class="btn">🚀 Go live now</button></form>
+  {% else %}
+  <p class="muted" style="margin:0 0 10px">For week one / new hardware: raises the auto-add
+  confidence bar and pauses Google sync so you tune against real audio without flooding your
+  calendar. See the <a href="https://github.com/jbarnell1/listener/blob/main/docs/FIELD-TUNING.md" target="_blank" rel="noopener">field-tuning playbook ↗</a>.</p>
+  <form method="post" action="{{ base }}/settings/calibration/enter"><button class="btn ghost">Enter calibration mode</button></form>
+  {% endif %}
+</div>
+
+<details class="card">
+  <summary style="cursor:pointer;display:flex;align-items:center;gap:8px">
+    <h2 style="display:inline;margin:0">⚙️ Tuning &amp; behavior</h2>
+    <span class="muted" style="font-size:.8rem">· advanced - tap to expand</span></summary>
+  <p class="muted" style="margin:10px 0 4px">Live knobs - changes apply immediately, no restart.
+  Leave at default unless something feels off; each shows its built-in default.</p>
+  <form method="post" action="{{ base }}/settings/tuning">
+    {% for group, knobs in tuning %}
+    <div class="sec" style="font-size:.9rem;margin:14px 2px 2px">{{ group }}</div>
+    {% for k in knobs %}
+    <div class="row" style="align-items:flex-start">
+      <div class="grow">
+        <div class="name">{{ k.label }}
+          {% if not k.is_default %}<span class="chip unk" style="font-size:.6rem;padding:1px 7px">changed</span>{% endif %}
+        </div>
+        <div class="muted" style="font-size:.76rem;margin-top:2px">{{ k.help }}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:none">
+        <div style="display:flex;align-items:center;gap:5px">
+          <input type="number" name="{{ k.key }}" value="{{ k.value }}"
+                 min="{{ k.min }}" max="{{ k.max }}" step="{{ k.step }}"
+                 style="width:82px;text-align:right">
+          {% if k.unit %}<span class="muted" style="min-width:28px">{{ k.unit }}</span>{% endif %}
+        </div>
+        <span class="muted" style="font-size:.64rem">default {{ k.default }}{{ k.unit }}</span>
+      </div>
+    </div>
+    {% endfor %}
+    {% endfor %}
+    <div class="field" style="margin-top:14px">
+      <button class="btn">Save tuning</button>
+      <button class="btn ghost" formaction="{{ base }}/settings/tuning/reset">Reset all to defaults</button>
+    </div>
+  </form>
+</details>
+
+<div class="card">
+  <h2>Privacy</h2>
+  <p class="muted" style="margin:0">All audio, transcripts, voiceprints, and the assistant
+  run <b>locally</b> on this machine. The dashboard is reachable only over your Tailscale
+  network - never the public internet.</p>
+  <p class="muted" style="margin:.6em 0 0">Captured audio <b>auto-deletes after 30 days</b>
+  (3 AM daily); transcripts and profiles are kept. Snippet playback becomes text-only once
+  audio is purged.</p>
+  <p class="muted" style="margin:.6em 0 0">Naming voices follows the
+  <a href="{{ base }}/consent">Usage &amp; Consent Policy</a> -
+  {% if consent_ok %}<span style="color:var(--good)">accepted ✓</span>{% else %}not yet accepted{% endif %}.</p>
+</div>
+{% endblock %}

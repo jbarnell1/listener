@@ -1,0 +1,128 @@
+# Architecture
+
+End-to-end design of the Listener system. This is the source of truth; the
+phase docs implement it.
+
+```
+                 ┌─────────────────────────────────────────┐
+   WEARABLE      │  ESP32-S3-WROOM-1U                       │
+   (PCB)         │   I2S mic ─▶ pre-roll ring buf ─▶ VAD    │
+                 │     │                              │      │
+                 │     ▼ (force-on / mute buttons)    ▼      │
+                 │   Opus/ADPCM encode ─▶ chunked WAV/bin    │
+                 │     │                                     │
+                 │     ▼                                     │
+                 │   Winbond W25N01 NAND (128MB) buffer      │
+                 │     │                                     │
+                 │     ▼  connectivity ladder                │
+                 │   WiFi(home LAN) → WiFi(hotspot)→ Funnel  │
+                 └─────────────────┬───────────────────────-┘
+                                   │ signed HTTPS POST /ingest
+                                   ▼
+                 ┌─────────────────────────────────────────┐
+   HOMELAB       │  i5 + RTX 4070 Super                      │
+   (Python)      │   /ingest (verify HMAC) ─▶ chunk store    │
+                 │     │                                     │
+                 │     ▼                                     │
+                 │   pyannote diarize + faster-whisper ─▶     │
+                 │     speaker-attributed transcript         │
+                 │     │                                     │
+                 │     ▼                                     │
+                 │   ECAPA embeddings ─▶ ID vs voice library │
+                 │     ─▶ relational profiles (people)       │
+                 │     │                                     │
+                 │     ▼                                     │
+                 │   LLM intent split (speaker-aware) ──┬─SOON│
+                 │     │                └─ LATER (tomorrow+)  │
+                 │     ▼                                     │
+                 │   SQLite intents + speakers + profiles    │
+                 │     │                                     │
+                 │     ▼                                     │
+                 │   APScheduler ─▶ timed email/webhook      │
+                 │   daily 6AM "Day Ahead" summary           │
+                 │   PWA dashboard + conversational editor   │
+                 └─────────────────────────────────────────-┘
+                                   │
+                                   ▼  email (Gemini-tagged) / Tasker webhook
+                                 PHONE
+```
+
+## Key design decisions (rationale in DECISIONS.md)
+
+### Recording: VAD-gated with pre-roll + manual override
+- Default = voice-activated. A **2–5 s RAM pre-roll ring buffer** is always
+  running; when VAD trips we flush the pre-roll *first* so the quiet lead-in is
+  never lost.
+- Buttons: **Force-Continuous** ("don't miss anything") and **Privacy-Mute**.
+- Skips idle/keyboard-noise periods → saves power and flash.
+
+### Speaker diarization, identification & relational profiling (see ADR-014)
+- Every transcript is **speaker-attributed**: pyannote.audio diarizes turns,
+  faster-whisper transcribes, words align to turns.
+- **ECAPA-TDNN voice embeddings** identify recurring people across recordings vs a
+  **known-voice library**. Unknown voices auto-cluster; you label a cluster once in
+  the dashboard ("this voice = wife") and future audio auto-tags.
+- Speaker-attributed text makes intents attributable ("**wife** asked X") and builds
+  **relational profiles** - continuously LLM-enriched per transcript (see ADR-023).
+- All on the homelab GPU. ⚠️ Profiling people's voices is sensitive - handled by a
+  per-speaker `do_not_profile` opt-out + per-person privacy delete (see ADR-023);
+  retention per ADR-021.
+
+### Storage: encode on-device (can't store raw)
+- 16 kHz/16-bit raw ≈ 115 MB/hr → 128 MB holds ~1 hr. Not viable.
+- **Opus ~16 kbps ≈ 7 MB/hr (~17 hrs)** preferred; **ADPCM 4:1** is the cheap
+  fallback. faster-whisper decodes Opus via ffmpeg.
+
+### Connectivity: configurable priority ladder; flash is the offline buffer
+1. **Home WiFi** → POST direct to homelab **LAN IP** (fast, no internet).
+2. **Other WiFi / phone hotspot** → POST to **public ingress** (Tailscale
+   Funnel or Cloudflare Tunnel), TLS + bearer token + HMAC.
+3. **No network** → keep caching to NAND; upload opportunistically on reconnect.
+- **Tailscale does NOT run on the ESP32.** The *homelab* runs Tailscale; the
+  device speaks plain signed HTTPS. Existing phone VPN/Termius flow is unaffected
+  because Funnel only exposes the single `/ingest` path.
+- **BLE** = control/status/provisioning only, never bulk audio.
+
+### Timeliness = scheduling, not connectivity
+- LLM extracts structured intent `{action, owner, due_time, tier, recurrence, confidence}`.
+- **Context shaping** (ADR-038): the small local model is fed a compact world snapshot
+  (speaker roster + open tasks + rolling recent-context) so it resolves people, task
+  **ownership**, vague references, and dups by retrieval; implicit speech ("out of
+  coffee") and explicit captures ("remind me" / a device REC press) are handled, ASR is
+  name-biased + non-speech-gated, and recurrence → Calendar RRULE.
+- **Confidence triage** (ADR-033): high-confidence commitments auto-route below;
+  uncertain ones are held in the dashboard **Review queue** until approved, so all-day
+  capture can't clutter the real calendar.
+- **Closure reconciliation** (ADR-032): each new conversation also closes out open
+  items it resolves - tasks auto-complete (Google item deleted), events ask to confirm;
+  every auto-close is logged and undoable.
+- **Dated reminders** → pushed to **Google Calendar (events) / Tasks (to-dos)** so
+  Google fires the reminder at the right time across devices, even if the homelab is
+  asleep; Gemini reads them natively (see ADR-026). A Settings **shutoff valve**
+  (ADR-034) can pause all Google writes without disconnecting.
+- **Undated follow-ups** → the nightly **daily brief** email (default 23:50 local,
+  configurable in Settings - ADR-034/024, captured by the next-morning Google Daily
+  Brief). Dated items also appear as a heads-up.
+- This decouples reminder delivery from our box being awake at reminder time.
+
+### Phone: minimal (no app - ADR-027)
+- ESP32 **captive-portal** for WiFi/hotspot/token provisioning (no app).
+- Homelab-served **PWA** (reached over your tailnet) for context review/edit -
+  installable, standalone, with an offline app shell (ADR-036).
+- Notifications come from **Google Calendar/Tasks + the email digest** (ADR-026/024) -
+  no Tasker, no Flutter (ADR-027).
+
+## Trust / security boundaries
+- Every device POST is HMAC-signed + timestamped (5-min replay window) over TLS.
+  Keys are **per-device** with revocation (`devices` table, ADR-042): a board sends
+  `X-Device` and signs with its own key, so a lost one can be revoked individually.
+  Devices that don't yet send `X-Device` fall back to a shared secret (legacy, until
+  their firmware is updated). *Firmware-side per-device keys + OTA rotation: issue #11.*
+- Funnel exposes **`/ingest` + `/telemetry`** (both signed); everything else (dashboard,
+  SSH) stays on the tailnet.
+- Audio at rest **auto-deletes after a configurable window (default 30 days, ADR-021/035)**;
+  transcripts/profiles are kept until deleted.
+- **Known gap - at-rest encryption (#5):** `listener.db` (incl. voiceprints), audio
+  chunks, and the B2 mirror are currently **unencrypted on disk**; protect via OS disk
+  encryption / SQLCipher / `rclone crypt` (decision pending: key custody). Third-party-
+  derived items stay **local-only** and verbatim quotes are never sent to Google (ADR-042).

@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page" style="margin-bottom:2px">{{ greeting }} 👋</h1>
+<p class="sub">Your day, captured and sorted.</p>
+
+<div class="statbar">
+  <a href="{{ base }}/speakers"><b>{{ counts.speakers }}</b><span>people</span></a>
+  <a href="{{ base }}/tasks"><b>{{ open_count }}</b><span>open tasks</span></a>
+  <a href="{{ base }}/unknown"><b>{{ unknowns|length }}</b><span>to name</span></a>
+  <a href="{{ base }}/activity"><b>{{ new_count }}</b><span>new</span></a>
+</div>
+
+<div class="card" id="qbanner" style="border-color:#3a4a6a;display:none;align-items:center;gap:10px">
+  <span id="qicon" style="font-size:18px">⏳</span>
+  <div><b id="qmain">…</b><br><span class="sub" id="qdetail" style="margin:0"></span></div>
+</div>
+<script>
+// Poll queue status in place - no full-page reload (which caused the flashing).
+(function(){
+  var el=document.getElementById('qbanner');
+  function tick(){
+    fetch('{{ base }}/queue.json',{cache:'no-store'}).then(function(r){return r.json();}).then(function(q){
+      if (q.pending>0 || q.state==='processing' || q.state==='deferred'){
+        el.style.display='flex';
+        var proc = q.state==='processing';
+        document.getElementById('qicon').textContent = proc ? '⚙️' : '⏳';
+        document.getElementById('qmain').textContent = proc ? 'Transcribing now…'
+          : (q.pending + ' clip' + (q.pending===1?'':'s') + ' queued');
+        document.getElementById('qdetail').textContent = q.detail || '';
+      } else { el.style.display='none'; }
+    }).catch(function(){});
+  }
+  tick(); setInterval(tick, 8000);
+})();
+</script>
+
+<form class="field" method="post" action="{{ base }}/tasks/add" style="margin:0 0 18px">
+  <input name="action" placeholder="✏️  Add a task…" autocomplete="off" required>
+  <button class="btn">Add</button>
+</form>
+
+{% if calibration %}
+<div class="card" style="border-color:#4c4329">
+  <h2>🧪 Calibration mode</h2>
+  <p class="muted" style="margin:0 0 8px">High-precision tuning: the auto-add bar is raised and
+  Google sync is paused, so you review locally without flooding your calendar. Work the
+  field-tuning loop, then go live.</p>
+  {% for ch in calibration.checks %}
+  <div class="row" style="border:none;padding:5px 0">
+    <div class="av" style="--hue:{{ 150 if ch.done else 40 }}">{{ '✅' if ch.done else '◯' }}</div>
+    <div class="grow"><div class="name" style="white-space:normal{% if ch.done %};opacity:.6{% endif %}">{{ ch.text }}</div></div>
+  </div>{% endfor %}
+  <form method="post" action="{{ base }}/settings/calibration/golive" style="margin-top:10px"
+        onsubmit="return confirm('Go live? Restores the normal auto-add bar and turns Google sync back on.')">
+    <button class="btn" style="width:100%;padding:12px">🚀 Go live</button>
+  </form>
+</div>
+{% endif %}
+
+{% if not setup_done %}
+<div class="card" style="border-color:#2c4d3e">
+  <h2>✨ Get set up</h2>
+  {% for s in setup %}
+  <a href="{{ base }}{{ s.href }}" class="row" style="color:inherit">
+    <div class="av" style="--hue:{{ 150 if s.done else 210 }}">{{ '✅' if s.done else s.icon }}</div>
+    <div class="grow"><div class="name" {% if s.done %}style="opacity:.55;text-decoration:line-through"{% endif %}>{{ s.text }}</div></div>
+    {% if not s.done %}<span class="chevron">›</span>{% endif %}
+  </a>{% endfor %}
+</div>
+{% endif %}
+
+{% if feedback %}
+<div class="card" style="border-color:#3a4a6a">
+  <div class="row" style="border:none;padding:0;gap:10px;flex-wrap:wrap">
+    <div class="av" style="--hue:265">📈</div>
+    <div class="grow"><div class="name" style="white-space:normal">{{ feedback.text }}</div></div>
+    <form method="post" action="{{ base }}/feedback/apply" style="display:inline">
+      <input type="hidden" name="dir" value="{{ feedback.dir }}">
+      <button class="btn" style="padding:8px 13px">Set to {{ feedback.to }}</button>
+    </form>
+    <form method="post" action="{{ base }}/feedback/dismiss" style="display:inline">
+      <button class="btn ghost" style="padding:8px 13px">Not now</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% include "_review_queue.html" %}
+
+{% if reflection %}
+<div class="card" style="border-color:#3a4a6a">
+  <h2>🔮 Patterns</h2>
+  {% for s in reflection %}
+  <div class="row" style="border:none;padding:6px 0">
+    <div class="av" style="--hue:265">•</div>
+    <div class="grow"><div class="name" style="white-space:normal;font-weight:500">{{ s }}</div></div>
+  </div>{% endfor %}
+</div>
+{% endif %}
+
+{% if review %}
+<div class="card" style="border-color:#3a4a6a">
+  <h2>Needs your review</h2>
+  {% for r in review %}
+  <a href="{{ base }}{{ r.href }}" class="row" style="color:inherit">
+    <div class="av" style="--hue:230">{{ r.icon }}</div>
+    <div class="grow"><div class="name">{{ r.text }}</div></div>
+    <span class="chevron">›</span>
+  </a>{% endfor %}
+</div>
+{% endif %}
+
+{% if unknowns %}
+<div class="sec">🔎 Name these voices</div>
+{% for u in unknowns[:3] %}
+  <div class="card" id="unk-{{ u.id }}" style="--hue:{{ u.id|hue }}">
+    <div class="row" style="border:none;padding:0 0 4px">
+      <div class="av">?</div>
+      <div class="grow"><div class="name">{{ u.label }}</div>
+        <div class="muted">{{ u.n_segments }} segments · who is this?</div></div>
+    </div>
+    {% for s in samples[u.id] %}
+      <div class="row" style="border:none">
+        <div class="grow">{{ s.text }}</div>
+        <audio controls preload="none" src="{{ base }}/segment/{{ s.id }}/audio.wav"></audio>
+      </div>
+    {% endfor %}
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+      {% if consent_ok %}
+      {% if enrolled %}
+      <form class="field" hx-post="{{ base }}/speakers/{{ u.id }}/merge"
+            hx-target="#unk-{{ u.id }}" hx-swap="outerHTML">
+        <select name="target">
+          {% for e in enrolled %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}
+        </select>
+        <button class="btn ghost">Merge into ↑</button>
+      </form>{% endif %}
+      <form class="field" hx-post="{{ base }}/speakers/{{ u.id }}/name"
+            hx-target="#unk-{{ u.id }}" hx-swap="outerHTML">
+        <input name="name" placeholder="Name as a new person">
+        <button class="btn">Save</button>
+      </form>
+      {% else %}
+      <a class="muted" href="{{ base }}/consent">🤝 Accept the naming policy to name voices →</a>
+      {% endif %}
+    </div>
+  </div>
+{% endfor %}
+{% if unknowns|length > 3 %}
+  <a class="muted" href="{{ base }}/unknown">+ {{ unknowns|length - 3 }} more unknown voices →</a>{% endif %}
+{% endif %}
+
+<div class="sec">📋 Up next</div>
+{% for label, items in task_groups %}
+  <div class="card"{% if label == 'Overdue' %} style="border-color:#5a2a32"{% endif %}>
+    <h2{% if label == 'Overdue' %} style="color:#ff8a8a"{% endif %}>{{ label }} · {{ items|length }}</h2>
+    {% for i in items[:6] %}{% include "_task.html" %}{% endfor %}
+    {% if items|length > 6 %}<a class="muted" href="{{ base }}/tasks">+ {{ items|length - 6 }} more →</a>{% endif %}
+  </div>
+{% else %}
+  <div class="card"><div class="empty">No open tasks - you're all caught up ✨</div></div>
+{% endfor %}
+
+<div class="sec">🎙️ Recently captured</div>
+<div class="card">
+  {% for t in transcripts %}
+    <a href="{{ base }}/transcripts/{{ t.id }}" class="row" style="color:inherit;--hue:{{ t.id|hue }}">
+      <div class="av">🎙️</div>
+      <div class="grow">
+        <div class="name">Conversation #{{ t.id }}</div>
+        <div class="muted">{{ t.n_segments }} segments · {{ t.created_at|localtime }}</div>
+        {% if rec_tags[t.id] %}<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">
+          {% for tg in rec_tags[t.id] %}<span class="chip" style="font-size:.66rem;padding:2px 8px">#{{ tg.name }}</span>{% endfor %}
+        </div>{% endif %}
+      </div>
+      <span class="chevron">›</span>
+    </a>
+  {% else %}<div class="empty">No conversations yet - audio arrives via /ingest</div>{% endfor %}
+</div>
+
+<script>
+// Subtle auto-refresh: keep the dashboard live without interrupting work.
+(function(){
+  const loadedAt = Date.now();
+  function idle(){
+    const sheet = document.getElementById('sheet');
+    const tag = (document.activeElement || {}).tagName;
+    return document.visibilityState === 'visible'
+      && !(sheet && sheet.classList.contains('open'))
+      && !['INPUT','SELECT','TEXTAREA'].includes(tag);
+  }
+  setInterval(()=>{ if(Date.now()-loadedAt > 90000 && idle()) location.reload(); }, 90000);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible' && Date.now()-loadedAt > 30000 && idle()) location.reload();
+  });
+})();
+</script>
+{% endblock %}

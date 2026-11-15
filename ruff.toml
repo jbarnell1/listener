@@ -1,0 +1,7 @@
+# Lint baseline for the server code: syntax errors and pyflakes findings only.
+target-version = "py310"
+line-length = 110
+extend-exclude = ["homelab/static"]
+
+[lint]
+select = ["E9", "F"]

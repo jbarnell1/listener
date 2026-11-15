@@ -1,0 +1,59 @@
+# Secrets / config
+*.env
+.env*
+secrets.*
+!secrets.example.h
+*device-secret*
+*.key
+*.pem
+
+# Audio / data (never commit captured audio or the context DB)
+*.wav
+*.opus
+*.raw
+*.pcm
+*.bin
+listener.db*
+*.sqlite
+*.sqlite3
+*.db
+chunks/
+audio/
+backups/
+audio_data.h
+
+# Speaker voiceprints (biometric) + downloaded model caches - never commit
+speakers.json
+models/
+# ingested audio chunks (sensitive)
+homelab/data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# ESP-IDF / Arduino build
+build/
+sdkconfig.old
+.pio/
+*.elf
+*.map
+
+# EDA tool autosaves / exports (keep curated exports under hardware/)
+*~
+*.lck
+*.bak
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/

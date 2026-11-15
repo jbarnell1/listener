@@ -1,0 +1,121 @@
+# PCB Layout Plan
+
+Schematic is complete + DRC-clean. This sheet covers converting to PCB, placement,
+routing, design rules, and the JLCPCB export.
+
+## 0. Convert
+In EasyEDA Pro: **Convert schematic → PCB**. All parts come in with a ratsnest
+(thin lines showing required connections). Set 2-layer board to start.
+
+## 1. Placement - the golden rule
+**Decoupling caps close to their IC's power pin, smallest cap closest, with a GND
+via right at the cap's ground pad.** Place each IC, then immediately cluster its
+passives. "Close" = within a few mm + a short (~1mm) trace - do NOT abut the pads
+(hand-assembly needs clearance to avoid solder bridging). The short loop + the GND
+via at the cap matter more than literal contact.
+
+### Decoupling placement (by designator)
+| IC | At the pin | Pin |
+|----|-----------|-----|
+| U5 ESP32-S3 | C9 (100nF) closest + C11 (10µF) + C12 (100nF) | 3V3 (pin 2 - the *only* 3V3 pin; cluster all 3, GND return at adjacent pin 1) |
+| U5 | C8 (1µF) + R13 (10k) | EN (3) |
+| U5 | R15 (10k) | IO0 (27) |
+| U4 NAND | C10 (100nF) | VCC (8) |
+| U4 | R11/R12/R14 (10k pull-ups) | near NAND |
+| U1 TP4056 | C1 (10µF) | VCC (4) |
+| U1 | C2 (10µF) | BAT (5) |
+| U1 | PROG R (1.2k) | PROG (2) |
+| U2 AP2112K | C3 (1µF) + C6 (10µF) | VIN (1) |
+| U2 | C4 (100nF) closest + C7 (10µF) | VOUT (5) |
+| U2 | R6 (10k) | EN (3) |
+
+### Special-case placement
+- **D1 USBLC6 + 5.1k CC R's:** right at the USB-C connector, inline on D+/D−.
+- **C5 (100nF sense filter):** near U5's IO7 (ADC end of `SENSE`), not the battery.
+- **U1 TP4056 EP:** GND pour + 4–9 thermal vias (enables 1A charge).
+- **Load-share Q1/D5 + gate R's (10k/220k):** in the VBUS/VBAT/VSYS power path,
+  short wide traces; gate R's at Q1's gate.
+- **LEDs:** placed for visibility through the enclosure; 470Ω next to each.
+- **Mic headers:** near the enclosure mic opening, away from power/antenna.
+
+## 1b. Board outline + floorplan (decided)
+- **Outline: 87 × 65 mm**, 2-layer, ~3mm rounded corners, **M2 holes in 4 corners**.
+- **Battery stacked behind**: 407090 3000mAh, **92×70×4mm** (JST-PH2.0). The board
+  (87×65) sits just **inside** the battery footprint (~2.5mm margin each side), so
+  the **battery sets the device size (~92×70mm)** while the board uses the full
+  area for easy routing. Still the cheapest JLCPCB tier (≤100×100mm).
+- All components on the **TOP layer**; bottom kept flat for the pack (foam tape) +
+  ground pour. Single-sided assembly = cheaper.
+- Put the **JST connector near the battery's pigtail exit** (one 70mm end).
+```
+ ┌──────────────────────────────────────────────────────────┐
+ │ [MIC hdrs]                          U.FL→  [LED1][LED2]    │
+ │                  ┌────────────┐   ┌──────┐  [REC][STAT]   │
+ │ [BTN_USER]       │ U5 ESP32-S3│   │ U4   │                │
+ │ [BTN_MODE]       │ +decoupling│   │ NAND │                │
+ │ [BOOT][RESET]    └────────────┘   └──────┘                │
+ │ [USB-C] D1  U1 TP4056   Q1/D5   U2 LDO        [JST batt]  │
+ └──────────────────────────────────────────────────────────┘
+```
+- Bottom edge = full power chain L→R: USB-C → D1 → TP4056 → load-share → LDO → JST.
+- Center: U5 + decoupling; U4 NAND right beside it (short SPI).
+- Top edge: mic at the case opening, module U.FL end facing this edge, LEDs visible.
+- Left edge: the four buttons.
+
+## 1c. Resistor placement
+Most resistors are **not** placement-critical (unlike decoupling caps) - pull-ups,
+LED series, EN/BOOT/NAND pull-ups can go in a "field," arranged for least crossover.
+A resistor's function doesn't depend on trace length. **Keep local anyway:**
+- **5.1k CC resistors** → at the USB-C connector.
+- **Q1 gate R's (10k/220k)** → at the MOSFET gate (compact gate node).
+- **Battery divider R7/R8 (220k) + C5 (100nF)** → keep the high-impedance `SENSE`
+  net SHORT, C5 near the GPIO7 ADC pin (long high-Z traces pick up noise).
+- Otherwise group each resistor near the IC it serves to minimize ratsnest sprawl.
+
+## 2. Placement strategy (clusters)
+- **Power cluster** (one corner near the USB-C edge): USB-C → D1 → U1 → load-share
+  → U2. Keeps high-current loops tight.
+- **Battery JST (U3):** board edge near U1/load-share.
+- **MCU+NAND:** center. Put U4 NAND **right next to U5's IO10–13** so SPI traces are
+  short. Keep digital signals over a solid ground.
+- **Buttons:** accessible edge/face. **LEDs:** visible face. **Mic:** at its opening.
+- **WROOM-1U antenna:** it's the **U.FL external-antenna** variant, so **no PCB
+  antenna keep-out is needed** (RF leaves via the U.FL coax). Just leave physical
+  room for the U.FL connector + cable at the module's antenna edge.
+
+## 3. Routing
+- **Power nets wider:** VBUS/VBAT/VSYS/3V3 ~0.5mm (1A charge path); signals
+  ~0.2–0.25mm. Set width while routing (or per-net under the **Track** rule) - NOT
+  via copper weight. **Copper thickness (1oz/2oz) ≠ trace width**; 1oz is fine here,
+  2oz just costs more. 0.5mm on 1oz carries ~1.5A.
+- **Ground:** copper **pour GND on both layers**, stitch with vias; solid ground
+  under the MCU and SPI/I2S signals (short return paths).
+- **Order of ops:** place → route → add vias (thermal under EP pads + stitching) →
+  **pour both layers LAST** → rebuild/refill pours → DRC. Pour is "fill what's left,"
+  so it flows around finished traces - never pour before routing.
+- **Closing ritual before export:** rebuild/refill pours → DRC → then Gerbers.
+  (A via added after pouring isn't truly connected until you refill.)
+- Keep SPI (SCK/MOSI/MISO/CS) and I2S short and roughly equal; keep them away from
+  the charge/switch nodes.
+- USB D+/D−: route as a rough pair, short, through D1.
+
+## 4. Design rules (JLCPCB)
+- Use EasyEDA's **JLCPCB design-rule preset**. Safe targets: trace/space ≥0.2mm
+  (min 0.127mm), via ≥0.3mm hole / 0.6mm pad, hole-to-edge ≥0.3mm.
+- Run **PCB DRC** until clean.
+
+## 5. Export for fab + assembly
+- **Gerbers** (fab), **BOM**, **CPL/Pick-and-place** (assembly).
+- For JLCPCB assembly: match LCSC part numbers in the BOM; mark hand-placed/
+  through-hole parts (mic module, JST, buttons, headers) as needed.
+- **JLCPCB order (recommended):** 2-layer, **5 pcs** (min/cheapest), **1.6mm**
+  (or 1.0mm slimmer), **ENIG** finish (flat pads - best for hotplate-reflowing the
+  WSON NAND + module fine pitch; HASL works but isn't flat), **1oz** copper, green.
+  Use EasyEDA's "Order at JLCPCB" one-click. **Preview Gerbers before submit**
+  (outline closed, silkscreen readable, pours correct).
+- We're hand-assembling → **bare boards only** (no CPL/assembly, skip device
+  standardization). Closing ritual first: rebuild pours → DRC clean → order.
+
+## Open
+- Final board outline / size (credit-card-ish) + mounting + enclosure.
+- Confirm thinner board (e.g. 1.0mm) if slimness matters.

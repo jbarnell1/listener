@@ -1,0 +1,5 @@
+# Test and lint tools for the dashboard (the light web venv). No ML deps, no GPU.
+#   uv pip install --python ~/listener-web/bin/python -r requirements-web.txt -r requirements-dev.txt
+#   cd homelab && ~/listener-web/bin/python -m ruff check . && ~/listener-web/bin/python -m pytest
+pytest==8.4.2
+ruff==0.14.4

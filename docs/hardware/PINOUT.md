@@ -1,0 +1,83 @@
+# ESP32-S3 Pinout (PRELIMINARY)
+
+> ⚠️ Preliminary - depends on **Q-H1** (module variant / PSRAM type). If the
+> module is an **R8 (octal PSRAM)** part, GPIO33–37 are consumed internally and
+> must NOT be used externally. The map below avoids them to stay variant-safe.
+
+## Reserved / do-not-touch
+| Pin | Use |
+|-----|-----|
+| GPIO19, GPIO20 | **Native USB** D-/D+ (programming + USB-Serial-JTAG) |
+| GPIO0 | **Strapping** (BOOT button) - fine as button, don't load heavily |
+| GPIO45, GPIO46, GPIO3 | **Strapping** - avoid or use with care |
+| GPIO26–32 | module SPI flash/PSMRAM (internal) - not exposed/usable |
+| GPIO33–37 | **only if octal PSMRAM (R8)** - keep free to be safe |
+| EN | RESET |
+
+## NAND (W25N01) - standard SPI single-bit (ADR-010)
+Single-bit SPI (Quad dropped - Opus data rate is tiny). Production uses the fast IO-MUX
+FSPI pins for SCK/MOSI/MISO/CS; IO2/IO3 are tied high, not routed to GPIOs - which
+**frees GPIO9 and GPIO14**.
+
+> ⚠️ **Dev board ≠ production NAND pinout.** The prototyping dev board is wired to the
+> *Hub* schematic (`spaceteam_irl`): **SCK=GPIO2, MOSI=GPIO1, MISO=GPIO11, CS=GPIO10**
+> - **confirmed working** (firmware `listener_device_nand`: JEDEC EF AA 21, verify PASS).
+> Production (below) moves NAND to **GPIO12/11/13/10** so GPIO1/2 are free for the **REC
+> (PTT) / MODE buttons**. So on the **dev board, GPIO1/2 are NAND** and the button/PTT
+> (X-Mark capture) path can't be exercised there - test PTT via the keyword path on the
+> dev board. **✅ CONFIRMED (2026-06-16) from the EasyEDA schematic:** the fabricated
+> boards route NAND_CS=IO10, SPI_MOSI=IO11, SPI_SCK=IO12, SPI_MISO=IO13, with BTN_USER=IO1
+> / BTN_MODE=IO2 and GPIO33–37 no-connect. Firmware updated to match (`BOARD_DEV 0`).
+
+**Production NAND pinout:**
+| Signal | GPIO | NAND pin | Notes |
+|--------|------|----------|-------|
+| SPI_SCK  | GPIO12 | CLK (pin6) | FSPICLK |
+| SPI_MOSI | GPIO11 | DI/IO0 (pin5) | FSPID |
+| SPI_MISO | GPIO13 | DO/IO1 (pin2) | FSPIQ |
+| NAND_CS  | GPIO10 | CS# (pin1) | FSPICS0; **10k pull-up to 3V3** |
+| WP#(IO2) | - | pin3 | **10k pull-up to 3V3** (disable, single-bit) |
+| HOLD#(IO3) | - | pin7 | **10k pull-up to 3V3** (disable, single-bit) |
+| VCC | - | pin8 | 3V3 + 100nF decoupling |
+| GND / EP | - | pin4 / pin9 (EP) | both to GND |
+
+## I2S microphone (INMP441) - input only
+| Signal | GPIO | Mic pin |
+|--------|------|---------|
+| I2S BCLK (SCK) | GPIO4 | SCK |
+| I2S WS (LRCL)  | GPIO5 | WS |
+| I2S SD (DOUT→MCU DIN) | GPIO6 | SD |
+| L/R select | tie to GND (left) | L/R |
+> Any GPIO can carry I2S via the matrix; GPIO4/5/6 chosen to sit away from
+> strapping/USB and keep routing short to the mic.
+
+## User interface
+| Button (silkscreen) | Connects to | Function |
+|---------------------|-------------|----------|
+| **RESET** | EN | resets the chip (EN low = reset) |
+| **BOOT** | GPIO0 | flash/download mode (strapping; hold at reset) |
+| **REC** (USER/PTT) | GPIO1 | record / push-to-talk; active-low, 10k pull-up |
+| **MODE** | GPIO2 | cycles VAD / continuous / mute |
+
+> Label by NET, not SW#: annotation numbers SW1–4 arbitrarily. RESET≠BOOT - EN is
+> reset, GPIO0 is boot. Put REC/MODE on an accessible face; BOOT/RESET can recess.
+
+| Other | GPIO | Notes |
+|-------|------|-------|
+| LED recording (red) | GPIO15 | + series R |
+| LED status (green) | GPIO16 | + series R |
+| Battery sense (ADC) | GPIO7 | ADC1_CH6, via divider; add 100nF |
+
+## Free / spare (variant-dependent)
+**GPIO9, GPIO14** (freed by SPI-single NAND, ADR-010), GPIO8, GPIO17, GPIO18,
+GPIO21, and GPIO38–48 (subject to module pad availability) remain for: charger
+status sense, a third LED, BLE-status pin, or future I2C.
+
+## Conflict check
+- USB (19/20) - isolated. ✔
+- SPI NAND (10–13) - no overlap with I2S (4–6) or UI. ✔
+- I2S (4–6) - clear of strapping. ✔
+- ADC battery sense on ADC1 (GPIO7) - ADC2 avoided (WiFi conflict). ✔
+
+**To finalize:** confirm which physical module pads are broken out, then lock
+this table before schematic capture. (Module = N16R8, GPIO33–37 reserved - ADR-007.)

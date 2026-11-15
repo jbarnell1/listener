@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">Transcript #{{ t.id }}</h1>
+<p class="sub">{{ t.created_at|localtime }}</p>
+
+<div class="card">
+  <h2>Topics</h2>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+    {% for tg in tags %}
+      <span class="chip" style="display:inline-flex;align-items:center;gap:5px">
+        <a href="{{ base }}/topics/{{ tg.id }}" style="color:inherit">#{{ tg.name }}</a>
+        <a href="#" onclick="document.getElementById('untag-{{ tg.id }}').submit();return false"
+           style="color:var(--muted)">✕</a></span>
+      <form id="untag-{{ tg.id }}" method="post" action="{{ base }}/transcripts/{{ t.id }}/untag/{{ tg.id }}" style="display:none"></form>
+    {% else %}<span class="muted">No topics yet</span>{% endfor %}
+  </div>
+  <form method="post" action="{{ base }}/transcripts/{{ t.id }}/tag" class="field" style="margin-top:10px">
+    <input name="name" list="alltags" placeholder="Add a topic…" autocomplete="off">
+    <datalist id="alltags">{% for t2 in all_tags %}<option value="{{ t2.name }}">{% endfor %}</datalist>
+    <button class="btn ghost">Add</button>
+  </form>
+</div>
+
+<div class="card">
+  {% for b in blocks %}
+    <div class="msg" style="--hue:{{ b.sid|hue }}">
+      <div class="av">{{ b.who|initials }}</div>
+      <div class="bubble">
+        <div><a class="who" href="{{ base }}/speakers/{{ b.sid }}">{{ b.who }}</a></div>
+        {% for ln in b.lines %}
+          <div class="line">
+            {% if ln.id %}<button class="snip" title="Play this snippet"
+                  onclick="LSplay(this,'/segment/{{ ln.id }}/audio.wav')">▶</button>{% endif %}
+            <span class="t">{{ '%.1f'|format(ln.t) }}s</span>{{ ln.text }}</div>
+        {% endfor %}
+      </div>
+    </div>
+  {% else %}<div class="empty">No segments</div>{% endfor %}
+</div>
+
+<style>
+.snip{background:none;border:none;color:var(--accent);cursor:pointer;font-size:.8rem;
+  padding:0 6px 0 0;vertical-align:baseline}
+.snip:hover{filter:brightness(1.2)}
+</style>
+{% endblock %}

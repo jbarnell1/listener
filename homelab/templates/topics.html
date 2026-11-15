@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">Topics</h1>
+{% if filtering %}
+  <p class="sub">Snippets matching <b>all</b> selected topics.</p>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+    {% for a in active_tags %}<a class="chip good" href="{{ a.remove_url }}">#{{ a.name }} ✕</a>{% endfor %}
+    <a class="chip" href="{{ base }}/topics">clear all</a>
+  </div>
+  <form method="get" action="{{ base }}/export">
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h2 style="margin:0">{{ snippets|length }} matching snippet{{ '' if snippets|length == 1 else 's' }}</h2>
+      {% if snippets %}<button class="btn ghost" style="padding:6px 12px;font-size:.82rem">⬇ Export selected</button>{% endif %}
+    </div>
+    <div style="margin-top:10px">
+    {% for s in snippets %}
+      <div class="row" style="--hue:{{ s.id|hue }}">
+        <input type="checkbox" name="ids" value="{{ s.id }}" style="width:auto;flex:none;accent-color:var(--accent)">
+        <a href="{{ base }}/transcripts/{{ s.id }}" class="grow" style="color:inherit;display:flex;align-items:center;gap:12px;min-width:0">
+          <div class="av">🎙️</div>
+          <div style="min-width:0"><div class="name">{{ s.who or 'Conversation #' ~ s.id }}</div>
+            <div class="muted">{{ s.n_segments }} segments · {{ s.created_at|localtime }}</div></div>
+        </a>
+        <span class="chevron">›</span>
+      </div>
+    {% else %}<div class="empty">No snippets carry all of these topics.</div>{% endfor %}
+    </div>
+  </div>
+  </form>
+  {% if other_tags %}
+  <div class="sec">Narrow further</div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    {% for o in other_tags %}<a class="chip" href="{{ o.add_url }}">+ #{{ o.name }}
+      <b style="color:var(--accent)">{{ o.n }}</b></a>{% endfor %}
+  </div>{% endif %}
+{% else %}
+  <p class="sub">What you talk about, gathered across conversations. Tap one to follow it - or combine a few to narrow.</p>
+  {% for t in tags %}
+    <a href="{{ base }}/topics/{{ t.id }}" class="card" style="display:block;color:inherit">
+      <div class="name" style="font-size:1.04rem">#{{ t.name }}
+        <span class="muted">· {{ t.n }} snippet{{ '' if t.n == 1 else 's' }}</span></div>
+      {% if t.summary %}<div class="muted" style="margin-top:4px">{{ t.summary|truncate(180) }}</div>{% endif %}
+      {% if t.last_at %}<div class="muted" style="font-size:.75rem;margin-top:6px">last heard {{ t.last_at|localtime }}</div>{% endif %}
+    </a>
+  {% else %}<div class="card"><div class="empty">No topics yet - they form automatically as conversations are processed.</div></div>{% endfor %}
+  {% if tags|length > 1 %}
+  <div class="sec">Combine topics</div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    {% for t in tags %}{% if t.n %}<a class="chip" href="{{ base }}/topics?t={{ t.id }}">#{{ t.name }}</a>{% endif %}{% endfor %}
+  </div>
+  <p class="muted" style="margin-top:8px;font-size:.78rem">Tap a chip to filter, then add more to narrow.</p>
+  {% endif %}
+{% endif %}
+{% endblock %}

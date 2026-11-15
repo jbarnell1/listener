@@ -1,0 +1,19 @@
+# Listener homelab - web dashboard + ingest (FastAPI + HTMX). Light venv, no ML deps.
+#   uv venv ~/listener-web --python 3.10
+#   uv pip install --python ~/listener-web/bin/python -r requirements-web.txt
+# Pinned to the versions the reference install runs. mcp 2.x renamed the client API
+# (assistant.py imports streamablehttp_client) and apscheduler 4.x dropped the scheduler
+# classes app.py uses, so do not let those two float.
+fastapi==0.136.3
+uvicorn[standard]==0.49.0
+jinja2==3.1.6
+python-multipart==0.0.30
+httpx==0.28.1
+dateparser==1.4.0   # H4: resolve relative due times → UTC (ADR-017)
+mcp==1.27.2  # page assistant: MCP server + client (ADR-020)
+apscheduler==3.11.2  # H5: nightly email brief scheduler (ADR-024)
+pywebpush==2.3.0  # web-push device-health alerts to the phone PWA (ADR-046)
+# Google Calendar + Tasks push (ADR-026) - OAuth, NOT the SMTP app password
+google-api-python-client==2.197.0
+google-auth-oauthlib==1.4.0
+google-auth-httplib2==0.4.0

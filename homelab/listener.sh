@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Listener dashboard + MCP control.  Usage: listener [up|down|restart|status|logs]
+# Default (no arg) = up.  Launches uvicorn DETACHED (setsid) so it survives the
+# terminal/SSH session closing; the app's lifespan auto-starts the MCP server.
+set -uo pipefail
+
+WEB="$HOME/listener-web/bin"
+APP="${LISTENER_APP:-$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)}"   # this folder
+LOG="/tmp/listener-web.log"
+
+_kill(){ pkill -f '[u]vicorn app:app' 2>/dev/null; pkill -f '[m]cp_server.py' 2>/dev/null; \
+         pkill -f '[w]orker.py' 2>/dev/null; true; }
+
+up(){
+  _kill; sleep 0.5
+  cd "$APP" || { echo "listener: can't cd $APP"; return 1; }
+  # load private creds (Gmail app password, etc.) into the app's environment
+  [ -f "$HOME/.listener.env" ] && { set -a; . "$HOME/.listener.env"; set +a; }
+  # Tailscale serves the dashboard at /listener and strips that prefix; --root-path puts it back
+  # into every link, the manifest scope and the service worker (ADR-056). The Funnel's /ingest
+  # and /telemetry still route: Starlette matches paths with or without the prefix.
+  # LISTENER_ROOT_PATH overrides the prefix: set it empty in ~/.listener.env to serve at "/"
+  # when no prefix-stripping proxy sits in front (ADR-057).
+  setsid "$WEB/uvicorn" app:app --host 0.0.0.0 --port 8000 \
+    --root-path "${LISTENER_ROOT_PATH-/listener}" \
+    >"$LOG" 2>&1 </dev/null &
+  disown 2>/dev/null || true
+  printf 'listener: starting'
+  for _ in $(seq 1 30); do
+    if curl -sf http://127.0.0.1:8000/healthz >/dev/null 2>&1; then echo; status; return 0; fi
+    printf '.'; sleep 0.4
+  done
+  echo; echo "listener: did not come up - check: listener logs"; return 1
+}
+
+down(){ _kill; echo "listener: stopped"; }
+
+status(){
+  if curl -sf http://127.0.0.1:8000/healthz >/dev/null 2>&1; then
+    local url; url=$(tailscale serve status 2>/dev/null | grep -oE 'https://[^ ]+' | head -1)
+    echo "listener: UP   → http://localhost:8000${url:+   (phone: $url)}"
+  else
+    echo "listener: DOWN  (run: listener up)"
+  fi
+  if pgrep -f '[m]cp_server.py' >/dev/null 2>&1; then echo "  mcp server: running"
+  else echo "  mcp server: stopped"; fi
+  if pgrep -f '[w]orker.py' >/dev/null 2>&1; then echo "  pipeline worker: running"
+  else echo "  pipeline worker: stopped"; fi
+}
+
+watchdog(){
+  # Self-heal: restart only if the app is actually down (safe no-op when healthy).
+  # Run periodically by a Windows Scheduled Task so a WSL/sleep/reboot can't leave
+  # the homelab silently down (which would fail device /ingest uploads).
+  local wlog="/tmp/listener-watchdog.log"
+  if curl -sf http://127.0.0.1:8000/healthz >/dev/null 2>&1; then
+    echo "$(date '+%F %T') ok" >> "$wlog"
+  else
+    echo "$(date '+%F %T') DOWN - restarting" >> "$wlog"
+    up >> "$wlog" 2>&1
+  fi
+}
+
+case "${1:-up}" in
+  up|start)     up ;;
+  down|stop)    down ;;
+  restart|re)   down; sleep 0.5; up ;;
+  status|st)    status ;;
+  watchdog|wd)  watchdog ;;
+  logs|log)     tail -n 40 -f "$LOG" ;;
+  *) echo "usage: listener [up|down|restart|status|watchdog|logs]" ;;
+esac

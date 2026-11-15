@@ -1,0 +1,46 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Please do not paste real transcripts, audio, Wi-Fi
+        passwords, device keys or your tailnet name. Invented examples are fine.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      options:
+        - Firmware (ESP32-S3)
+        - Hardware (board, power, microphone)
+        - Server pipeline (transcription, diarization, LLM)
+        - Dashboard (web UI)
+        - Docs
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Serial output from the board, or /tmp/listener-web.log from the server. Redact anything private.
+      render: text
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Commit, OS, GPU and VRAM, Python version, Ollama model, ESP32 Arduino core version, board revision.

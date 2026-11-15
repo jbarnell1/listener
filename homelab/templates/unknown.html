@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="page">Unknown speakers</h1>
+<p class="sub">Voices we couldn't place. Listen, then merge into a known person
+(improves their voiceprint) or name as new - recognized from then on. Fill in as many
+as you like and <b>Save all</b> in one go.</p>
+
+{% if unknowns and not consent_ok %}
+<div class="card" style="border-color:#4c4329">
+  <div class="empty" style="padding:16px 0">🤝 Naming a voice links it to a real person.
+  <a href="{{ base }}/consent">Review &amp; accept the naming policy</a> to enable identifying voices.</div>
+</div>
+{% elif unknowns %}
+<form method="post" action="{{ base }}/unknown/batch">
+{% for u in unknowns %}
+  <div class="card" style="--hue:{{ u.id|hue }}">
+    <div class="row" style="border:none;padding-bottom:6px">
+      <div class="av">?</div>
+      <div class="grow"><div class="name">{{ u.label }}</div>
+        <div class="muted">{{ u.n_segments }} segments</div></div>
+    </div>
+    {% for s in samples[u.id] %}
+      <div class="row">
+        <div class="grow">{{ s.text }} <span class="muted">[{{ '%.1f'|format(s.t_start) }}s]</span></div>
+        <audio controls preload="none" src="{{ base }}/segment/{{ s.id }}/audio.wav"></audio>
+      </div>
+    {% endfor %}
+    <div style="display:flex;flex-direction:column;gap:9px;margin-top:12px">
+      {% if enrolled %}
+      <div class="field">
+        <select name="merge_{{ u.id }}">
+          <option value="">- merge into… (improves their voiceprint)</option>
+          {% for e in enrolled %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="field">
+        <input name="name_{{ u.id }}" placeholder="…or name as a new person" autocomplete="off">
+      </div>
+      <label class="muted" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" name="dismiss_{{ u.id }}" value="1">
+        🚫 Not a person / dismiss - drop this voice (kept so it won't resurface)
+      </label>
+    </div>
+  </div>
+{% endfor %}
+  <div style="position:sticky;bottom:calc(var(--nav-safe) + 10px);margin-top:6px">
+    <button class="btn" style="width:100%;padding:13px">💾 Save all assignments</button>
+  </div>
+</form>
+{% else %}
+  <div class="card"><div class="empty">Every voice is recognized 🎉</div></div>
+{% endif %}
+{% endblock %}

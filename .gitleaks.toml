@@ -1,0 +1,23 @@
+# gitleaks configuration: the default rules plus one for this project's device secrets. Add an
+# allowlist only after checking a finding is a false positive or a retired value; a live secret
+# is rotated, never allowlisted.
+
+title = "Listener"
+
+[extend]
+useDefault = true
+
+# The default rules do not catch a bare hex key pasted into a sketch, which is the mistake
+# this repository has made before.
+[[rules]]
+id = "listener-device-secret"
+description = "Hex secret assigned to INGEST_SECRET or DEVICE_KEY"
+regex = '''(?:INGEST_SECRET|DEVICE_KEY)\s*=\s*"([0-9a-fA-F]{32,})"'''
+keywords = ["INGEST_SECRET", "DEVICE_KEY"]
+
+  [[rules.allowlists]]
+  description = "Commits that predate this rule, reviewed in the share-ready audit (ADR-057). History is kept."
+  commits = [
+    "c2c88b7c72af908e5bfd0699e7f7d04890f67cb8",
+    "dcdb20b0296b9c216f814a7cabf5b68b7950319c",
+  ]

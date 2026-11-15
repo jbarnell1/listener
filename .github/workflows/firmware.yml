@@ -1,0 +1,52 @@
+name: Firmware
+
+# Compile check for the ESP32-S3 sketches with a pinned arduino-cli and a pinned ESP32 core.
+# Runs only when firmware changes. The two sketches that embed a private test recording
+# (audio_data.h, gitignored) are not built here.
+
+on:
+  push:
+    branches: [main]
+    paths: ["firmware/**", ".github/workflows/firmware.yml"]
+  pull_request:
+    paths: ["firmware/**", ".github/workflows/firmware.yml"]
+
+permissions:
+  contents: read
+
+env:
+  ARDUINO_CLI_VERSION: "1.1.1"
+  ESP32_CORE_VERSION: "3.3.0"
+  FQBN: "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi"
+
+jobs:
+  compile:
+    name: Compile (ESP32-S3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: ${{ env.ARDUINO_CLI_VERSION }}
+      - name: Cache the ESP32 core
+        uses: actions/cache@v4
+        with:
+          path: ~/.arduino15
+          key: arduino15-esp32-${{ env.ESP32_CORE_VERSION }}
+      - name: Install the ESP32 core
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install "esp32:esp32@${ESP32_CORE_VERSION}"
+      - name: Use the example secrets
+        run: |
+          for d in listener_continuous listener_capture_upload; do
+            cp "firmware/$d/secrets.example.h" "firmware/$d/secrets.h"
+          done
+      - name: Compile
+        run: |
+          for d in listener_continuous listener_capture_upload listener_bringup listener_nand_test; do
+            echo "::group::$d"
+            arduino-cli compile --fqbn "$FQBN" --warnings default "firmware/$d"
+            echo "::endgroup::"
+          done
